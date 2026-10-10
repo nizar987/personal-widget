@@ -1,0 +1,124 @@
+// !$*UTF8*$!
+{
+    archiveVersion = 1;
+    classes = {
+    };
+    objectVersion = 60;
+    objects = {
+
+/* Begin PBXBuildFile section */
+        FC8CBCF84C904FF9898D62D6 /* TaskWidgetApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAC00CA790C46AD9F06A6E5 /* TaskWidgetApp.swift */; };
+        94ECFC96382643B9A5D164C0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7911318A001145B58144DB26 /* ContentView.swift */; };
+        3F6056A0460043189D35AED1 /* Models/Task.swift in Sources */ = {isa = PBXBuildFile; fileRef = D083142F884D4040A43D1437 /* Models/Task.swift */; };
+        2F3FE928E422416C83E1AD6E /* Services/APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 852A4F22AAE243F3A837680A /* Services/APIClient.swift */; };
+        AD111FF78AF045B196E1CF22 /* TaskProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D4328208FAD4E5E9CB0133C /* TaskProvider.swift */; };
+        CA43F76C784D4CDAACE686DB /* TaskWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85F6C2945BA34159AD8B6040 /* TaskWidgetView.swift */; };
+        A3D056BF827349A9A8F3610D /* AppIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98A5FA47A2344325BA5C7EFF /* AppIntent.swift */; };
+        0EDF813FAE184D57AD92C933 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = F39F495F03D24F53BF10535A /* Constants.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+        DAAC00CA790C46AD9F06A6E5 /* TaskWidgetApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidgetApp.swift"; sourceTree = "<group>"; };
+        7911318A001145B58144DB26 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView.swift"; sourceTree = "<group>"; };
+        D083142F884D4040A43D1437 /* Models/Task.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Task.swift"; sourceTree = "<group>"; };
+        852A4F22AAE243F3A837680A /* Services/APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "APIClient.swift"; sourceTree = "<group>"; };
+        4D4328208FAD4E5E9CB0133C /* TaskProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskProvider.swift"; sourceTree = "<group>"; };
+        85F6C2945BA34159AD8B6040 /* TaskWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidgetView.swift"; sourceTree = "<group>"; };
+        98A5FA47A2344325BA5C7EFF /* AppIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppIntent.swift"; sourceTree = "<group>"; };
+        F39F495F03D24F53BF10535A /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Constants.swift"; sourceTree = "<group>"; };
+        6059BFF2D55A478F9FAD3D0E /* TaskWidget.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TaskWidget.app; sourceTree = BUILT_PRODUCTS_DIR; };
+        B185BD830A1942E999D314C4 /* TaskWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TaskWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+        9D1F77D84FD64A3E81297FB8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+        F849682128BD4958A2AD3CD6 /* Main */ = {
+            isa = PBXGroup;
+            children = (
+                3F31DF6B54A94F8ABADA5B0A /* TaskWidget */,
+                EE02D20E760446EEBAA7AA58 /* TaskWidgetExtension */,
+                B12F2259DA374C98BE382BAF /* Shared */,
+            );
+            sourceTree = "<group>";
+        };
+        3F31DF6B54A94F8ABADA5B0A /* TaskWidget */ = {
+            isa = PBXGroup;
+            children = (
+                DAAC00CA790C46AD9F06A6E5 /* TaskWidgetApp.swift */,
+                7911318A001145B58144DB26 /* ContentView.swift */,
+            );
+            path = TaskWidget;
+            sourceTree = "<group>";
+        };
+        EE02D20E760446EEBAA7AA58 /* TaskWidgetExtension */ = {
+            isa = PBXGroup;
+            children = (
+                4D4328208FAD4E5E9CB0133C /* TaskProvider.swift */,
+                85F6C2945BA34159AD8B6040 /* TaskWidgetView.swift */,
+                98A5FA47A2344325BA5C7EFF /* AppIntent.swift */,
+            );
+            path = TaskWidgetExtension;
+            sourceTree = "<group>";
+        };
+        B12F2259DA374C98BE382BAF /* Shared */ = {
+            isa = PBXGroup;
+            children = (
+                F39F495F03D24F53BF10535A /* Constants.swift */,
+            );
+            path = Shared;
+            sourceTree = "<group>";
+        };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+        {app_target_id} /* TaskWidget */ = {{
+            isa = PBXNativeTarget;
+            buildConfigurationList = {genUUID()};
+            buildPhases = (
+                {genUUID()} /* Sources */,
+            );
+            buildRules = (
+            );
+            dependencies = (
+            );
+            name = TaskWidget;
+            productName = TaskWidget;
+            productType = "com.apple.product-type.application";
+        }};
+        {widget_target_id} /* TaskWidgetExtension */ = {{
+            isa = PBXNativeTarget;
+            buildConfigurationList = {genUUID()};
+            buildPhases = (
+                {genUUID()} /* Sources */,
+            );
+            buildRules = (
+            );
+            dependencies = (
+            );
+            name = TaskWidgetExtension;
+            productName = TaskWidgetExtension;
+            productType = "com.apple.product-type.app-extension";
+        }};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+        {project_id} /* Project object */ = {{
+            isa = PBXProject;
+            attributes = {{
+                BuildIndependentTargetsInParallel = 1;
+            }};
+            buildConfigurationList = {genUUID()};
+            mainGroup = {main_group};
+            productRefGroup = {main_group};
+            projectDirPath = "";
+            projectRoot = "";
+            targets = (
+                {app_target_id},
+                {widget_target_id},
+            );
+        }};
+/* End PBXProject section */
+
+    }};
+    rootObject = {project_id};
+}}
