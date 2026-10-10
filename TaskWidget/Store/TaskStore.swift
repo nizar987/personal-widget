@@ -6,7 +6,11 @@ import WidgetKit
 @Observable
 @MainActor
 final class TaskStore {
-    private(set) var tasks: [Task] = []
+    private(set) var tasks: [Task] = [] {
+        didSet { onTasksChanged?(tasks) }
+    }
+    /// Observers outside SwiftUI (e.g. reminder scheduling) hook in here.
+    @ObservationIgnored var onTasksChanged: (([Task]) -> Void)?
     private(set) var isLoading = false
     private(set) var isOffline = false
     var errorMessage: String?

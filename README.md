@@ -7,7 +7,8 @@ reports and a global quick-capture hotkey. Data lives in a small local Rust serv
 - **Quick capture** — press **⌥Space** anywhere, type `Fix bug #wms !high besok`, press ↵
 - **Desktop widget** — small / medium / large, check tasks off right on the desktop
 - **App window** — smart lists, projects, editor, search, calendar, weekly reports
-- **Menu bar** — today's tasks, new task, open window; no Dock icon
+- **Morning reminder** — at 08:00 a notification lists today's tasks, repeating up to 3× until you press **Understood**
+- **Menu bar** — today's tasks, new task, open window; the Dock icon only shows while the window is open
 
 ## Requirements
 
@@ -89,8 +90,10 @@ Open **TaskWidget** from Applications. **No window appears** — look for the �
 bar. From that menu:
 
 - **Open TaskWidget** (⌘O) — the main window
-- **Settings…** (⌘,) — turn on **Open at login** so the menu bar app and hotkey are ready after
-  every login
+- **Settings…** (⌘,) — turn on **Open at login** so the menu bar app, hotkey and reminders are
+  ready after every login
+
+macOS asks for permission to send notifications on first launch — click **Allow**.
 
 ### 7. Put the widget on the desktop
 
@@ -113,6 +116,11 @@ Press **⌥Space** from any app, type a task, press **↵**. That's it.
 | ⇧↵ | Add and keep the panel open for the next task |
 | Esc / click outside | Close |
 
+**Autocomplete** appears while you type: `#` lists your projects, `!` the priorities, `@` or the
+start of a date word (`bes…`, `fri…`, `jum…`) the dates with what they resolve to, and the start of
+a title earlier tasks — picking one fills in its project and priority too. **⇥** accepts the
+highlighted suggestion, **↑/↓** choose another (then **↵** accepts it), **Esc** hides the list.
+
 Shortcuts you can type anywhere in the text (they're removed from the title):
 
 | Type | Means |
@@ -134,6 +142,16 @@ due in 3 days. Without `#project` the task goes to the project you used last.
 **Change the hotkey:** menu bar → **Settings… → Quick Capture** → click the field and press
 a new combination (it warns about conflicts). **Reset to ⌥Space** restores the default. If
 Raycast or Alfred already uses ⌥Space, pick something else here.
+
+## Daily reminder
+
+Every morning at **08:00**, if anything is due that day (or overdue), a notification lists those
+tasks. If you don't press **Understood**, it shows again **15 minutes later, up to 3 times** in
+total. Completing all of the day's tasks cancels the remaining repeats automatically.
+
+Settings → **Daily Reminder** lets you turn it off, change the time, change the repeat interval
+(5–60 min) and **Send test notification**. If macOS notifications are off for TaskWidget, the same
+section links to System Settings.
 
 ## Using the app
 
@@ -169,6 +187,7 @@ Every change refreshes the desktop widget immediately.
 | Widget shows *Failed to load widget… error 5* | Set the **Team** on both targets (step 4), clean (⇧⌘K) and rebuild |
 | TaskWidget missing in **Edit Widgets** | Open the app from /Applications once, then log out and back in |
 | Widget still uses an old server/port | Remove stray copies of `TaskWidget.app`, then `pkill -f TaskWidgetExtension` |
+| No morning notification | Settings → Daily Reminder → *Send test notification*; if nothing shows, allow TaskWidget in **System Settings → Notifications** |
 | ⌥Space does nothing | Is the ☑︎ icon in the menu bar? If not, open the app. Otherwise another app owns the shortcut — change it in Settings |
 | `launchctl bootstrap` *error 5* | Run the install script again; it waits for the old service to stop |
 | Sidebar/columns look squashed after an update | Quit the app, run `defaults delete com.multiagent.taskwidget` (only window sizes are reset), reopen |
@@ -186,7 +205,9 @@ Then quit TaskWidget and delete `/Applications/TaskWidget.app`. The database sta
 
 ```
 TaskWidget/                 macOS app (menu bar, window, quick capture)
-├── App/                    AppDelegate (hotkey, lifecycle), menu bar
+├── App/                    AppDelegate (hotkey, lifecycle, Dock), menu bar
+├── Notifications/          morning reminder planning + scheduling
+├── Assets.xcassets         app icon (regenerate: scripts/render_app_icon.swift)
 ├── QuickCapture/           floating panel + natural-language parser
 ├── Store/TaskStore.swift   shared, optimistic state
 ├── Models/                 Task, sidebar lists, weekly report maths

@@ -1,39 +1,4 @@
 import SwiftUI
-import Observation
-
-/// State shared between the panel controller and its SwiftUI content.
-@Observable
-@MainActor
-final class QuickCaptureSession {
-    var text = ""
-    var errorMessage: String?
-    private(set) var projects: [String] = []
-    /// Bumped on every show so the view re-focuses the field.
-    private(set) var presentation = 0
-
-    private static let lastProjectKey = "quickCapture.lastProject"
-
-    /// Project used when the text has no `#project`.
-    var defaultProject: String {
-        if let last = UserDefaults.standard.string(forKey: Self.lastProjectKey), !last.isEmpty { return last }
-        return projects.first ?? "Inbox"
-    }
-
-    func prepare(projects: [String]) {
-        text = ""
-        errorMessage = nil
-        self.projects = projects
-        presentation += 1
-    }
-
-    func updateProjects(_ projects: [String]) {
-        self.projects = projects
-    }
-
-    func rememberProject(_ project: String) {
-        UserDefaults.standard.set(project, forKey: Self.lastProjectKey)
-    }
-}
 
 private struct QuickCaptureSizeKey: PreferenceKey {
     static var defaultValue: CGSize = .zero
@@ -59,6 +24,7 @@ struct QuickCaptureView: View {
     var body: some View {
         @Bindable var session = session
         let draft = draft
+        let suggestions = session.suggestions
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 Image(systemName: savedPulse > 0 && !isSaving ? "checkmark.circle.fill" : "plus.circle.fill")
@@ -79,6 +45,19 @@ struct QuickCaptureView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 16)
 
+            if !suggestions.isEmpty {
+                SuggestionList(suggestions: suggestions,
+                               selectedIndex: min(session.selectedIndex, suggestions.count - 1),
+                               onHover: { session.selectedIndex = $0 },
+                               onPick: { pick in
+                                   session.accept(pick)
+                                   focused = true
+                               })
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             Divider().opacity(0.5)
 
             HStack(spacing: 6) {
@@ -93,11 +72,12 @@ struct QuickCaptureView: View {
                          tint: draft.due == nil ? .secondary : Palette.upcoming)
                 }
                 Spacer(minLength: 8)
-                keyHint
+                keyHint(completing: !suggestions.isEmpty)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .animation(AppStyle.spring, value: draft)
+            .animation(.easeOut(duration: 0.12), value: suggestions.map(\.id))
 
             if let error = session.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -140,8 +120,8 @@ struct QuickCaptureView: View {
             .foregroundStyle(.secondary)
     }
 
-    private var keyHint: some View {
-        Text("↵ add   ⇧↵ add another   esc close")
+    private func keyHint(completing: Bool) -> some View {
+        Text(completing ? "⇥ complete   ↑↓ choose   ↵ add" : "↵ add   ⇧↵ add another   esc close")
             .font(.system(size: 11, design: .rounded))
             .foregroundStyle(.tertiary)
             .lineLimit(1)
@@ -171,6 +151,69 @@ struct QuickCaptureView: View {
                 session.text = ""
                 focused = true
             }
+        }
+    }
+}
+
+/// Autocomplete rows under the text field. Hover highlights, click accepts.
+private struct SuggestionList: View {
+    let suggestions: [QuickCaptureSuggestion]
+    let selectedIndex: Int
+    let onHover: (Int) -> Void
+    let onPick: (QuickCaptureSuggestion) -> Void
+
+    var body: some View {
+        VStack(spacing: 2) {
+            ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
+                Button { onPick(suggestion) } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: icon(for: suggestion.kind))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(tint(for: suggestion.kind))
+                            .frame(width: 18)
+                        Text(suggestion.label)
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(suggestion.detail)
+                            .font(.system(size: 12, design: .rounded))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        if index == selectedIndex {
+                            Text("⇥")
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(index == selectedIndex ? Color.accentColor.opacity(0.18) : .clear)
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { if $0 { onHover(index) } }
+            }
+        }
+    }
+
+    private func icon(for kind: QuickCaptureSuggestion.Kind) -> String {
+        switch kind {
+        case .project: return "folder.fill"
+        case .priority: return "flag.fill"
+        case .date: return "calendar"
+        case .title: return "clock.arrow.circlepath"
+        }
+    }
+
+    private func tint(for kind: QuickCaptureSuggestion.Kind) -> Color {
+        switch kind {
+        case .project: return Palette.project
+        case .priority: return Palette.today
+        case .date: return Palette.upcoming
+        case .title: return .secondary
         }
     }
 }

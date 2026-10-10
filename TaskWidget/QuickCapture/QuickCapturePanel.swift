@@ -5,6 +5,7 @@ import SwiftUI
 /// pulling the rest of the app forward, so closing it returns you to whatever you were doing.
 final class QuickCapturePanel: NSPanel {
     var onResignKey: (() -> Void)?
+    var onCancel: (() -> Void)?
 
     init<Content: View>(rootView: Content) {
         super.init(contentRect: NSRect(x: 0, y: 0, width: QuickCaptureLayout.width, height: 120),
@@ -52,7 +53,7 @@ final class QuickCapturePanel: NSPanel {
 
     /// Esc.
     override func cancelOperation(_ sender: Any?) {
-        orderOut(nil)
+        if let onCancel { onCancel() } else { orderOut(nil) }
     }
 }
 
@@ -68,6 +69,7 @@ final class QuickCaptureController {
     private let store: TaskStore
     private let session = QuickCaptureSession()
     private lazy var panel: QuickCapturePanel = makePanel()
+    private var keyMonitor: Any?
 
     init(store: TaskStore) {
         self.store = store
@@ -78,21 +80,41 @@ final class QuickCaptureController {
     }
 
     func show() {
-        session.prepare(projects: store.projects)
+        session.prepare(tasks: store.tasks, projects: store.projects)
         panel.fitToContent()
         position(panel)
         panel.makeKeyAndOrderFront(nil)
+        installKeyMonitor()
         quickCaptureLog.info("panel shown frame=\(NSStringFromRect(self.panel.frame), privacy: .public) key=\(self.panel.isKeyWindow)")
         // Refresh projects for `#` completion and the default project in the background.
         _Concurrency.Task {
             await store.load()
-            session.updateProjects(store.projects)
+            session.update(tasks: store.tasks, projects: store.projects)
         }
     }
 
     func hide() {
         quickCaptureLog.info("panel hidden")
+        removeKeyMonitor()
         panel.orderOut(nil)
+    }
+
+    /// Tab / ↑ / ↓ / ↵ / Esc drive autocomplete. They're intercepted before the text field's
+    /// editor sees them, and only while suggestions are visible.
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.panel,
+                  let key = QuickCaptureSession.Key(keyCode: event.keyCode),
+                  event.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift]) || key != .returnKey
+            else { return event }
+            return self.session.handle(key) ? nil : event
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
     }
 
     private func makePanel() -> QuickCapturePanel {
@@ -105,6 +127,7 @@ final class QuickCaptureController {
         }
         let panel = QuickCapturePanel(rootView: view)
         panel.onResignKey = { [weak self] in self?.hide() }
+        panel.onCancel = { [weak self] in self?.hide() }
         return panel
     }
 

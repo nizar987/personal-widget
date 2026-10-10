@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Menu-bar app (no Dock icon): ⌥Space opens quick capture, the menu opens the main window.
+/// Menu-bar app: ⌥Space opens quick capture, the menu opens the main window. The Dock icon only
+/// appears while that window is open (see `DockPresence`).
 @main
 struct TaskWidgetApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -9,6 +10,8 @@ struct TaskWidgetApp: App {
         Window("TaskWidget", id: WindowID.main) {
             ContentView(store: appDelegate.store)
                 .frame(minWidth: 640, minHeight: 460)
+                .onAppear { DockPresence.mainWindowDidOpen() }
+                .onDisappear { DockPresence.mainWindowDidClose() }
         }
         .defaultSize(width: 1100, height: 700)
         .windowToolbarStyle(.unified)

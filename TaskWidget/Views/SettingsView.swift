@@ -23,6 +23,7 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
+            ReminderSettingsSection()
             Section("Backend") {
                 LabeledContent("Server", value: Constants.apiBaseURL.absoluteString)
                 Text("Tasks sync with the local Rust server in backend/. It starts at login via a LaunchAgent.")

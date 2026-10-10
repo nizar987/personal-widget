@@ -43,6 +43,12 @@
 		52190392292106BAAE81A080 /* QuickCapturePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CCA02C0DC2356684E18B529 /* QuickCapturePanel.swift */; };
 		F498883796E6934A79C2E74E /* QuickCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA108BC1807347060BA1E54E /* QuickCaptureView.swift */; };
 		E0C7715BE992AB9AD2548A3B /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 62B6C0AA0898B64580BCD9E7 /* KeyboardShortcuts */; };
+		8DC7758F3F8ED3110B833A6D /* DailyReminderPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB9FF484C7D6B8C851064F2E /* DailyReminderPlanner.swift */; };
+		ABDCDCD9DD4CE860A49F1B6B /* DailyReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7E1EF2A355247590BB7599 /* DailyReminderScheduler.swift */; };
+		FD31E0B254637E8AAEA898D1 /* ReminderSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71B03EB8FC23D207975F2C0E /* ReminderSettingsSection.swift */; };
+		09B9A4D84F3F604C49171A89 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 75046E84DAE53AA83B440071 /* Assets.xcassets */; };
+		B068EC16483A460682A8F9F6 /* QuickCaptureSuggester.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E43B723FF7884780779E3A3 /* QuickCaptureSuggester.swift */; };
+		24722B3C7E9883AF80C2C638 /* QuickCaptureSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90C9035438482E3F01779AE7 /* QuickCaptureSession.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -106,6 +112,12 @@
 		70DF7B340AAEF51F5CFA2F7F /* QuickCaptureParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/QuickCapture/QuickCaptureParser.swift"; sourceTree = SOURCE_ROOT; };
 		3CCA02C0DC2356684E18B529 /* QuickCapturePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/QuickCapture/QuickCapturePanel.swift"; sourceTree = SOURCE_ROOT; };
 		AA108BC1807347060BA1E54E /* QuickCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/QuickCapture/QuickCaptureView.swift"; sourceTree = SOURCE_ROOT; };
+		FB9FF484C7D6B8C851064F2E /* DailyReminderPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Notifications/DailyReminderPlanner.swift"; sourceTree = SOURCE_ROOT; };
+		AE7E1EF2A355247590BB7599 /* DailyReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Notifications/DailyReminderScheduler.swift"; sourceTree = SOURCE_ROOT; };
+		71B03EB8FC23D207975F2C0E /* ReminderSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Views/ReminderSettingsSection.swift"; sourceTree = SOURCE_ROOT; };
+		75046E84DAE53AA83B440071 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "TaskWidget/Assets.xcassets"; sourceTree = SOURCE_ROOT; };
+		1E43B723FF7884780779E3A3 /* QuickCaptureSuggester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/QuickCapture/QuickCaptureSuggester.swift"; sourceTree = SOURCE_ROOT; };
+		90C9035438482E3F01779AE7 /* QuickCaptureSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/QuickCapture/QuickCaptureSession.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -143,6 +155,12 @@
 			children = (
 				B511E1FC1C924A3FBD6EE20E /* TaskWidgetApp.swift */,
 				AD366503D9734029813531E0 /* ContentView.swift */,
+				90C9035438482E3F01779AE7 /* QuickCaptureSession.swift */,
+				1E43B723FF7884780779E3A3 /* QuickCaptureSuggester.swift */,
+				75046E84DAE53AA83B440071 /* Assets.xcassets */,
+				71B03EB8FC23D207975F2C0E /* ReminderSettingsSection.swift */,
+				AE7E1EF2A355247590BB7599 /* DailyReminderScheduler.swift */,
+				FB9FF484C7D6B8C851064F2E /* DailyReminderPlanner.swift */,
 				AA108BC1807347060BA1E54E /* QuickCaptureView.swift */,
 				3CCA02C0DC2356684E18B529 /* QuickCapturePanel.swift */,
 				70DF7B340AAEF51F5CFA2F7F /* QuickCaptureParser.swift */,
@@ -277,6 +295,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				09B9A4D84F3F604C49171A89 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -296,6 +315,11 @@
 			files = (
 				BA250A209F164BEF861F2C4E /* TaskWidgetApp.swift in Sources */,
 				5DC06B1A68754A2EA8DE36BA /* ContentView.swift in Sources */,
+				24722B3C7E9883AF80C2C638 /* QuickCaptureSession.swift in Sources */,
+				B068EC16483A460682A8F9F6 /* QuickCaptureSuggester.swift in Sources */,
+				FD31E0B254637E8AAEA898D1 /* ReminderSettingsSection.swift in Sources */,
+				ABDCDCD9DD4CE860A49F1B6B /* DailyReminderScheduler.swift in Sources */,
+				8DC7758F3F8ED3110B833A6D /* DailyReminderPlanner.swift in Sources */,
 				F498883796E6934A79C2E74E /* QuickCaptureView.swift in Sources */,
 				52190392292106BAAE81A080 /* QuickCapturePanel.swift in Sources */,
 				1818A9C2AF83FF4AAB771FC2 /* QuickCaptureParser.swift in Sources */,
@@ -395,7 +419,7 @@
 		EB9C01A404B641BF8C53CC75 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -418,7 +442,7 @@
 		4C8A8FD5DB684F8893EDB1E6 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
