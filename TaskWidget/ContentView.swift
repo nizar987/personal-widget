@@ -90,7 +90,7 @@ struct ContentView: View {
             Spacer()
 
             Button {
-                Task { await submit() }
+                _Concurrency.Task { await submit() }
             } label: {
                 HStack {
                     if isSaving { ProgressView().controlSize(.small) }
@@ -112,7 +112,7 @@ struct ContentView: View {
                 Text("Tasks").font(.headline)
                 Spacer()
                 Button {
-                    Task { await load() }
+                    _Concurrency.Task { await load() }
                 } label: {
                     Image(systemName: "arrow.clockwise").font(.caption)
                 }
@@ -139,7 +139,7 @@ struct ContentView: View {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         ForEach(tasks) { t in
                             TaskRow(task: t) {
-                                Task { await toggle(t.id) }
+                                _Concurrency.Task { await toggle(t.id) }
                             }
                         }
                     }
@@ -183,7 +183,7 @@ struct ContentView: View {
         defer { isSaving = false }
         let dueDate = newHasDate ? Self.isoDate(newDueDate) : nil
         do {
-            let created = await APIClient.shared.createTask(NewTaskInput(
+            let created = try await APIClient.shared.createTask(NewTaskInput(
                 title: newTitle.trim(),
                 project: newProject.trim(),
                 priority: newPriority,
@@ -203,7 +203,7 @@ struct ContentView: View {
 
     private func toggle(_ id: Int) async {
         do {
-            let updated = await APIClient.shared.toggleTask(id: id)
+            let updated = try await APIClient.shared.toggleTask(id: id)
             if let i = tasks.firstIndex(where: { $0.id == id }) {
                 tasks[i] = updated
             }

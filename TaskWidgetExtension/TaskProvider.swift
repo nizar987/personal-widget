@@ -16,7 +16,7 @@ struct TaskProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TaskEntry>) -> Void) {
-        Task {
+        _Concurrency.Task {
             do {
                 let tasks = try await APIClient.shared.fetchTasks(view: "today")
                 let entry = TaskEntry(

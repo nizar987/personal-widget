@@ -61,9 +61,14 @@ struct TaskWidgetExtensionWidget: Widget {
     }
 }
 
-#Preview(as: .systemSmall) {
-    TaskWidgetExtensionWidget()
-} timeline: {
-    TaskEntry(date: Date(), title: "Team meeting", count: 4, priority: .high)
-    TaskEntry(date: Date().addingTimeInterval(3600), title: "Code review", count: 3, priority: .medium)
+struct TaskWidgetView_Previews: PreviewProvider {
+    static var previews: some View {
+        let entry = TaskEntry(date: Date(), title: "Team meeting", count: 4, priority: .high)
+        Group {
+            TaskWidgetView(entry: entry)
+                .previewContext(WidgetPreviewContext(family: .systemSmall))
+            TaskWidgetView(entry: entry)
+                .previewContext(WidgetPreviewContext(family: .systemMedium))
+        }
+    }
 }

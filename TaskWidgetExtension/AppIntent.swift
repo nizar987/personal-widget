@@ -1,4 +1,5 @@
 import AppIntents
+import SwiftUI
 import Foundation
 
 // MARK: - AddTask intent
