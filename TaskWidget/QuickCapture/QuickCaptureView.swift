@@ -35,11 +35,18 @@ final class QuickCaptureSession {
     }
 }
 
+private struct QuickCaptureSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) { value = nextValue() }
+}
+
 struct QuickCaptureView: View {
     let session: QuickCaptureSession
     /// Returns true when saved. `keepOpen` is ⇧↵ ("add another").
     let onSave: (QuickCaptureDraft, _ keepOpen: Bool) async -> Bool
     let onClose: () -> Void
+    /// Reports the content size so the panel can grow/shrink (e.g. when an error appears).
+    var onSizeChange: (CGSize) -> Void = { _ in }
 
     @FocusState private var focused: Bool
     @State private var isSaving = false
@@ -107,6 +114,10 @@ struct QuickCaptureView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08))
         )
+        .background(GeometryReader { geo in
+            Color.clear.preference(key: QuickCaptureSizeKey.self, value: geo.size)
+        })
+        .onPreferenceChange(QuickCaptureSizeKey.self) { onSizeChange($0) }
         .onExitCommand(perform: onClose)
         .onAppear { focused = true }
         .onChange(of: session.presentation) {

@@ -21,9 +21,25 @@ final class QuickCapturePanel: NSPanel {
         hasShadow = true
         animationBehavior = .utilityWindow
 
-        let hosting = NSHostingController(rootView: rootView)
-        hosting.sizingOptions = [.preferredContentSize]
-        contentViewController = hosting
+        // Sized manually (see `fit(to:)`): automatic hosting sizing fed back into layout and
+        // either left the panel at 0×0 or recursed until the stack overflowed.
+        let hosting = NSHostingView(rootView: rootView)
+        hosting.sizingOptions = []
+        contentView = hosting
+    }
+
+    /// Measures the SwiftUI content; used before showing so the panel never opens at 0×0.
+    func fitToContent() {
+        guard let size = contentView?.fittingSize else { return }
+        fit(to: size)
+    }
+
+    /// Resizes to `size`, keeping the top edge fixed so the text field doesn't jump.
+    func fit(to size: CGSize) {
+        guard size.width > 0, size.height > 0,
+              abs(size.width - frame.width) > 0.5 || abs(size.height - frame.height) > 0.5 else { return }
+        let top = frame.maxY
+        setFrame(NSRect(x: frame.minX, y: top - size.height, width: size.width, height: size.height), display: true)
     }
 
     override var canBecomeKey: Bool { true }
@@ -63,8 +79,10 @@ final class QuickCaptureController {
 
     func show() {
         session.prepare(projects: store.projects)
+        panel.fitToContent()
         position(panel)
         panel.makeKeyAndOrderFront(nil)
+        quickCaptureLog.info("panel shown frame=\(NSStringFromRect(self.panel.frame), privacy: .public) key=\(self.panel.isKeyWindow)")
         // Refresh projects for `#` completion and the default project in the background.
         _Concurrency.Task {
             await store.load()
@@ -73,6 +91,7 @@ final class QuickCaptureController {
     }
 
     func hide() {
+        quickCaptureLog.info("panel hidden")
         panel.orderOut(nil)
     }
 
@@ -81,6 +100,8 @@ final class QuickCaptureController {
             await self?.save(draft, keepOpen: keepOpen) ?? false
         } onClose: { [weak self] in
             self?.hide()
+        } onSizeChange: { [weak self] size in
+            self?.panel.fit(to: size)
         }
         let panel = QuickCapturePanel(rootView: view)
         panel.onResignKey = { [weak self] in self?.hide() }

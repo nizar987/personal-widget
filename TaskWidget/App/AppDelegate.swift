@@ -1,10 +1,19 @@
 import AppKit
 import KeyboardShortcuts
+import OSLog
 import WidgetKit
+
+let quickCaptureLog = Logger(subsystem: "com.multiagent.taskwidget", category: "quickCapture")
 
 extension KeyboardShortcuts.Name {
     /// Global quick-capture hotkey. Default ⌥Space; changeable in Settings.
     static let quickCapture = Self("quickCapture", initial: .init(.space, modifiers: [.option]))
+}
+
+extension Notification.Name {
+    /// Post from anywhere (Shortcuts, scripts) to open quick capture:
+    /// `DistributedNotificationCenter.default().post(name: .init("com.multiagent.taskwidget.quickCapture"), object: nil)`
+    static let quickCaptureRequest = Notification.Name("com.multiagent.taskwidget.quickCapture")
 }
 
 enum WindowID {
@@ -26,8 +35,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Launching (e.g. at login) pulls fresh data into the desktop widget.
         WidgetCenter.shared.reloadAllTimelines()
+        let shortcut = KeyboardShortcuts.getShortcut(for: .quickCapture).map { "\($0)" } ?? "none"
+        quickCaptureLog.info("registering quick capture hotkey: \(shortcut, privacy: .public)")
         KeyboardShortcuts.onKeyUp(for: .quickCapture) { [weak self] in
+            quickCaptureLog.info("hotkey pressed")
             self?.quickCapture.toggle()
+        }
+        DistributedNotificationCenter.default().addObserver(
+            forName: .quickCaptureRequest, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                quickCaptureLog.info("quick capture requested via notification")
+                self?.quickCapture.show()
+            }
         }
         _Concurrency.Task { await store.load() }
     }
