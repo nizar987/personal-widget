@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D1E2F3A4B5C6D7E8F9A0B1C2 /* TaskWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 33A3D60AA62B42E491915311 /* TaskWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BA250A209F164BEF861F2C4E /* TaskWidgetApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B511E1FC1C924A3FBD6EE20E /* TaskWidgetApp.swift */; };
 		5DC06B1A68754A2EA8DE36BA /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD366503D9734029813531E0 /* ContentView.swift */; };
 		3527B00DF87D45C59D71BDBA /* Models/Task.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61A6B378E6334695905308CA /* Models/Task.swift */; };
@@ -26,6 +27,20 @@
 			remoteInfo = TaskWidgetExtension;
 		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7F8E6D5C4B3A2E1D0C9B8A7F /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D1E2F3A4B5C6D7E8F9A0B1C2 /* TaskWidgetExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		B511E1FC1C924A3FBD6EE20E /* TaskWidgetApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/TaskWidgetApp.swift"; sourceTree = SOURCE_ROOT; };
@@ -115,10 +130,12 @@
 				95261C8A76D94649B14C6929 /* Sources */,
 				E98137ED63B64A5FBFC2E3E8 /* Frameworks */,
 				BB24351462D34FEC8183215E /* Resources */,
+				7F8E6D5C4B3A2E1D0C9B8A7F /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				8A3B5C7D9E1F2A4B6C8D0E2F /* PBXTargetDependency */,
 			);
 			name = TaskWidget;
 			productName = TaskWidget;
