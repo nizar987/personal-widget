@@ -41,8 +41,7 @@ struct AddTaskIntent: AppIntent {
             throw ValidationError(message: "Project cannot be empty")
         }
 
-        let base = URL(string: "http://localhost:3210")!
-        let url = base.appendingPathComponent("/api/tasks")
+        let url = Constants.apiBaseURL.appendingPathComponent("/api/tasks")
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -112,8 +111,7 @@ struct ToggleTaskIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        let base = URL(string: "http://localhost:3210")!
-        var req = URLRequest(url: base.appendingPathComponent("/api/tasks/\(taskId)/toggle"))
+        var req = URLRequest(url: Constants.apiBaseURL.appendingPathComponent("/api/tasks/\(taskId)/toggle"))
         req.httpMethod = "POST"
         let (_, response) = try await URLSession.shared.data(for: req)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
@@ -135,11 +133,15 @@ struct Shortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: AddTaskIntent(),
-            phrases: ["Add a task in \(.applicationName)", "Create task in \(.applicationName)"]
+            phrases: ["Add a task in \(.applicationName)", "Create task in \(.applicationName)"],
+            shortTitle: "Add Task",
+            systemImageName: "plus.circle"
         )
         AppShortcut(
             intent: ToggleTaskIntent(),
-            phrases: ["Toggle a task in \(.applicationName)"]
+            phrases: ["Toggle a task in \(.applicationName)"],
+            shortTitle: "Toggle Task",
+            systemImageName: "checkmark.circle"
         )
     }
 }

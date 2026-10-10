@@ -11,6 +11,8 @@ struct Task: Identifiable, Codable, Hashable {
     var completed: Bool
     var createdAt: String
     var updatedAt: String
+    /// UTC "YYYY-MM-DD HH:MM:SS" when marked done; nil while open.
+    var completedAt: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, project, priority
@@ -19,6 +21,7 @@ struct Task: Identifiable, Codable, Hashable {
         case completed
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case completedAt = "completed_at"
     }
 }
 

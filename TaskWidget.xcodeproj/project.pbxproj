@@ -16,6 +16,33 @@
 		F10C663EA3C843EAA0EB49C9 /* TaskWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE423F023934857BBC020E3 /* TaskWidgetView.swift */; };
 		92506E5CD0FB445D8B4968ED /* AppIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4414113A51904C5B989BCAE1 /* AppIntent.swift */; };
 		3EB635513238426EAD281D1B /* Shared/Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42A983FD95834ECE9B660660 /* Shared/Constants.swift */; };
+		A1B2C3D4E5F60718293A4B02 /* WidgetTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B01 /* WidgetTheme.swift */; };
+		A1B2C3D4E5F60718293A4B04 /* WidgetComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B03 /* WidgetComponents.swift */; };
+		A1B2C3D4E5F60718293A4B06 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B05 /* AppIntents.framework */; };
+		A1B2C3D4E5F60718293A4B08 /* LaunchAtLoginToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B07 /* LaunchAtLoginToggle.swift */; };
+		BE339FB4954E7F01E490458D /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D00F9EA9053CC5CFEA8E9E1 /* TaskStore.swift */; };
+		D013B2261C5D0F0A3C440707 /* TaskList.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE2AB4F0B3AED970A178E484 /* TaskList.swift */; };
+		98875964328637979B8FCB1B /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E48642BB34A1E3280D70937 /* Components.swift */; };
+		D578459CBAA000E87B2198E2 /* TaskRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B481F8AC4AB43B0CA91065F /* TaskRowView.swift */; };
+		109C1DC5480AC336AE9401E7 /* QuickAddBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F623AF951D21D29CD2467C55 /* QuickAddBar.swift */; };
+		17F3369D55EE525A57B14791 /* TaskEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30C304FDDD8DAC6230B21F7 /* TaskEditorView.swift */; };
+		A6C80BD0E4A2067DD9B987B7 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F91673F7E204E1898CE4268 /* SidebarView.swift */; };
+		F757A03CDE2F2DC1002BD0EB /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CC4A207D62302657423CAF2 /* TaskListView.swift */; };
+		38F9CF8DF3859342B7086A7F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52FBF5C00A3992BE2C193F42 /* SettingsView.swift */; };
+		A0D056442F286B5E34FBA200 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A808D11355BDD7DD4A0773C /* Palette.swift */; };
+		E97FB71762F897E473F405A8 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A808D11355BDD7DD4A0773C /* Palette.swift */; };
+		1EDBBC85E87A36C61EA08066 /* TaskGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C4F9CA13B4827736CCD49F3 /* TaskGrouping.swift */; };
+		912DA01202327E9CCCB22530 /* TaskGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C4F9CA13B4827736CCD49F3 /* TaskGrouping.swift */; };
+		E6ED5B6C309AD8C31CE8FC03 /* WeeklyReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17C24C804E21D154FAC0937F /* WeeklyReport.swift */; };
+		F0123BBDA0265BD050003511 /* MonthGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3766A11BED7A54FA80507C71 /* MonthGridView.swift */; };
+		B10C22448C8281648AF25EF1 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2880DAF1B86DF5C97468804 /* CalendarView.swift */; };
+		052D2811807BC678A33A5F51 /* WeeklyReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE335D8EBB09D6311A527959 /* WeeklyReportView.swift */; };
+		B5B7EEAB8F45D5E3D811E7BE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A7427820A0CC4389C3DAE48 /* AppDelegate.swift */; };
+		3822157741DC39C65F37297A /* MenuBarContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5228CB7183DA186F256E2F6F /* MenuBarContent.swift */; };
+		1818A9C2AF83FF4AAB771FC2 /* QuickCaptureParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70DF7B340AAEF51F5CFA2F7F /* QuickCaptureParser.swift */; };
+		52190392292106BAAE81A080 /* QuickCapturePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CCA02C0DC2356684E18B529 /* QuickCapturePanel.swift */; };
+		F498883796E6934A79C2E74E /* QuickCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA108BC1807347060BA1E54E /* QuickCaptureView.swift */; };
+		E0C7715BE992AB9AD2548A3B /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 62B6C0AA0898B64580BCD9E7 /* KeyboardShortcuts */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,7 +80,32 @@
 		42A983FD95834ECE9B660660 /* Shared/Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Constants.swift"; sourceTree = SOURCE_ROOT; };
 		BC0BE4BADBBF4BFBB8492BCF /* TaskWidget.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TaskWidget.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		33A3D60AA62B42E491915311 /* TaskWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TaskWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E7A1C2D3B4F5061728394A5B /* TaskWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "TaskWidgetExtension/TaskWidgetExtension.entitlements"; sourceTree = SOURCE_ROOT; };
 		C0096947E9EA4A91B9E46C91 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "TaskWidgetExtension/Info.plist"; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F60718293A4B01 /* WidgetTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidgetExtension/WidgetTheme.swift"; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F60718293A4B03 /* WidgetComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidgetExtension/WidgetComponents.swift"; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F60718293A4B05 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60718293A4B07 /* LaunchAtLoginToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/LaunchAtLoginToggle.swift"; sourceTree = SOURCE_ROOT; };
+		7D00F9EA9053CC5CFEA8E9E1 /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Store/TaskStore.swift"; sourceTree = SOURCE_ROOT; };
+		FE2AB4F0B3AED970A178E484 /* TaskList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Models/TaskList.swift"; sourceTree = SOURCE_ROOT; };
+		1E48642BB34A1E3280D70937 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Views/Components.swift"; sourceTree = SOURCE_ROOT; };
+		3B481F8AC4AB43B0CA91065F /* TaskRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Views/TaskRowView.swift"; sourceTree = SOURCE_ROOT; };
+		F623AF951D21D29CD2467C55 /* QuickAddBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Views/QuickAddBar.swift"; sourceTree = SOURCE_ROOT; };
+		D30C304FDDD8DAC6230B21F7 /* TaskEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Views/TaskEditorView.swift"; sourceTree = SOURCE_ROOT; };
+		0F91673F7E204E1898CE4268 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Views/SidebarView.swift"; sourceTree = SOURCE_ROOT; };
+		1CC4A207D62302657423CAF2 /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Views/TaskListView.swift"; sourceTree = SOURCE_ROOT; };
+		52FBF5C00A3992BE2C193F42 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Views/SettingsView.swift"; sourceTree = SOURCE_ROOT; };
+		0A808D11355BDD7DD4A0773C /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Palette.swift"; sourceTree = SOURCE_ROOT; };
+		9C4F9CA13B4827736CCD49F3 /* TaskGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/TaskGrouping.swift"; sourceTree = SOURCE_ROOT; };
+		17C24C804E21D154FAC0937F /* WeeklyReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Models/WeeklyReport.swift"; sourceTree = SOURCE_ROOT; };
+		3766A11BED7A54FA80507C71 /* MonthGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Views/MonthGridView.swift"; sourceTree = SOURCE_ROOT; };
+		B2880DAF1B86DF5C97468804 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Views/CalendarView.swift"; sourceTree = SOURCE_ROOT; };
+		FE335D8EBB09D6311A527959 /* WeeklyReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/Views/WeeklyReportView.swift"; sourceTree = SOURCE_ROOT; };
+		1A7427820A0CC4389C3DAE48 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/App/AppDelegate.swift"; sourceTree = SOURCE_ROOT; };
+		5228CB7183DA186F256E2F6F /* MenuBarContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/App/MenuBarContent.swift"; sourceTree = SOURCE_ROOT; };
+		70DF7B340AAEF51F5CFA2F7F /* QuickCaptureParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/QuickCapture/QuickCaptureParser.swift"; sourceTree = SOURCE_ROOT; };
+		3CCA02C0DC2356684E18B529 /* QuickCapturePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/QuickCapture/QuickCapturePanel.swift"; sourceTree = SOURCE_ROOT; };
+		AA108BC1807347060BA1E54E /* QuickCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TaskWidget/QuickCapture/QuickCaptureView.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -61,6 +113,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E0C7715BE992AB9AD2548A3B /* KeyboardShortcuts in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -68,6 +121,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D4E5F60718293A4B06 /* AppIntents.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -89,6 +143,25 @@
 			children = (
 				B511E1FC1C924A3FBD6EE20E /* TaskWidgetApp.swift */,
 				AD366503D9734029813531E0 /* ContentView.swift */,
+				AA108BC1807347060BA1E54E /* QuickCaptureView.swift */,
+				3CCA02C0DC2356684E18B529 /* QuickCapturePanel.swift */,
+				70DF7B340AAEF51F5CFA2F7F /* QuickCaptureParser.swift */,
+				5228CB7183DA186F256E2F6F /* MenuBarContent.swift */,
+				1A7427820A0CC4389C3DAE48 /* AppDelegate.swift */,
+				FE335D8EBB09D6311A527959 /* WeeklyReportView.swift */,
+				B2880DAF1B86DF5C97468804 /* CalendarView.swift */,
+				3766A11BED7A54FA80507C71 /* MonthGridView.swift */,
+				17C24C804E21D154FAC0937F /* WeeklyReport.swift */,
+				52FBF5C00A3992BE2C193F42 /* SettingsView.swift */,
+				1CC4A207D62302657423CAF2 /* TaskListView.swift */,
+				0F91673F7E204E1898CE4268 /* SidebarView.swift */,
+				D30C304FDDD8DAC6230B21F7 /* TaskEditorView.swift */,
+				F623AF951D21D29CD2467C55 /* QuickAddBar.swift */,
+				3B481F8AC4AB43B0CA91065F /* TaskRowView.swift */,
+				1E48642BB34A1E3280D70937 /* Components.swift */,
+				FE2AB4F0B3AED970A178E484 /* TaskList.swift */,
+				7D00F9EA9053CC5CFEA8E9E1 /* TaskStore.swift */,
+				A1B2C3D4E5F60718293A4B07 /* LaunchAtLoginToggle.swift */,
 				61A6B378E6334695905308CA /* Models/Task.swift */,
 				FF17FCFDF0954889A3754797 /* Services/APIClient.swift */,
 			);
@@ -99,8 +172,11 @@
 			children = (
 				12E07640C3214F5894C81CF1 /* TaskProvider.swift */,
 				8DE423F023934857BBC020E3 /* TaskWidgetView.swift */,
+				A1B2C3D4E5F60718293A4B03 /* WidgetComponents.swift */,
+				A1B2C3D4E5F60718293A4B01 /* WidgetTheme.swift */,
 				4414113A51904C5B989BCAE1 /* AppIntent.swift */,
 				C0096947E9EA4A91B9E46C91 /* Info.plist */,
+				E7A1C2D3B4F5061728394A5B /* TaskWidgetExtension.entitlements */,
 			);
 			sourceTree = "<group>";
 		};
@@ -108,6 +184,8 @@
 			isa = PBXGroup;
 			children = (
 				42A983FD95834ECE9B660660 /* Shared/Constants.swift */,
+				9C4F9CA13B4827736CCD49F3 /* TaskGrouping.swift */,
+				0A808D11355BDD7DD4A0773C /* Palette.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -138,6 +216,9 @@
 				8A3B5C7D9E1F2A4B6C8D0E2F /* PBXTargetDependency */,
 			);
 			name = TaskWidget;
+			packageProductDependencies = (
+				62B6C0AA0898B64580BCD9E7 /* KeyboardShortcuts */,
+			);
 			productName = TaskWidget;
 			productReference = BC0BE4BADBBF4BFBB8492BCF /* TaskWidget.app */;
 			productType = "com.apple.product-type.application";
@@ -178,6 +259,9 @@
 				Base,
 			);
 			mainGroup = F436766F36F24797A9ABD06C;
+			packageReferences = (
+				3D6FEB118D5FFFB2EB0E7F64 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+			);
 			productRefGroup = E32337C646D1488EBB45832A /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -212,6 +296,27 @@
 			files = (
 				BA250A209F164BEF861F2C4E /* TaskWidgetApp.swift in Sources */,
 				5DC06B1A68754A2EA8DE36BA /* ContentView.swift in Sources */,
+				F498883796E6934A79C2E74E /* QuickCaptureView.swift in Sources */,
+				52190392292106BAAE81A080 /* QuickCapturePanel.swift in Sources */,
+				1818A9C2AF83FF4AAB771FC2 /* QuickCaptureParser.swift in Sources */,
+				3822157741DC39C65F37297A /* MenuBarContent.swift in Sources */,
+				B5B7EEAB8F45D5E3D811E7BE /* AppDelegate.swift in Sources */,
+				052D2811807BC678A33A5F51 /* WeeklyReportView.swift in Sources */,
+				B10C22448C8281648AF25EF1 /* CalendarView.swift in Sources */,
+				F0123BBDA0265BD050003511 /* MonthGridView.swift in Sources */,
+				E6ED5B6C309AD8C31CE8FC03 /* WeeklyReport.swift in Sources */,
+				1EDBBC85E87A36C61EA08066 /* TaskGrouping.swift in Sources */,
+				A0D056442F286B5E34FBA200 /* Palette.swift in Sources */,
+				38F9CF8DF3859342B7086A7F /* SettingsView.swift in Sources */,
+				F757A03CDE2F2DC1002BD0EB /* TaskListView.swift in Sources */,
+				A6C80BD0E4A2067DD9B987B7 /* SidebarView.swift in Sources */,
+				17F3369D55EE525A57B14791 /* TaskEditorView.swift in Sources */,
+				109C1DC5480AC336AE9401E7 /* QuickAddBar.swift in Sources */,
+				D578459CBAA000E87B2198E2 /* TaskRowView.swift in Sources */,
+				98875964328637979B8FCB1B /* Components.swift in Sources */,
+				D013B2261C5D0F0A3C440707 /* TaskList.swift in Sources */,
+				BE339FB4954E7F01E490458D /* TaskStore.swift in Sources */,
+				A1B2C3D4E5F60718293A4B08 /* LaunchAtLoginToggle.swift in Sources */,
 				3527B00DF87D45C59D71BDBA /* Models/Task.swift in Sources */,
 				0334BD5453954E53BA8434E4 /* Services/APIClient.swift in Sources */,
 				3EB635513238426EAD281D1B /* Shared/Constants.swift in Sources */,
@@ -224,6 +329,10 @@
 			files = (
 				A3574F0562DE4A66ADFB8316 /* TaskProvider.swift in Sources */,
 				F10C663EA3C843EAA0EB49C9 /* TaskWidgetView.swift in Sources */,
+				912DA01202327E9CCCB22530 /* TaskGrouping.swift in Sources */,
+				E97FB71762F897E473F405A8 /* Palette.swift in Sources */,
+				A1B2C3D4E5F60718293A4B04 /* WidgetComponents.swift in Sources */,
+				A1B2C3D4E5F60718293A4B02 /* WidgetTheme.swift in Sources */,
 				92506E5CD0FB445D8B4968ED /* AppIntent.swift in Sources */,
 				3EB635513238426EAD281D1B /* Shared/Constants.swift in Sources */,
 				3527B00DF87D45C59D71BDBA /* Models/Task.swift in Sources */,
@@ -232,6 +341,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8A3B5C7D9E1F2A4B6C8D0E2F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 244C1DE718F247B8A4E80A1D /* TaskWidgetExtension */;
+			targetProxy = B429DDF807A545C683F3FBDB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		4774A5EB2EF5499890F384A5 /* Debug */ = {
@@ -242,7 +359,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -265,7 +382,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -282,6 +399,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -293,7 +411,7 @@
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 			};
 			name = Debug;
 		};
@@ -304,6 +422,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -315,7 +434,7 @@
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 			};
 			name = Release;
 		};
@@ -325,6 +444,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = TaskWidgetExtension/TaskWidgetExtension.entitlements;
 				INFOPLIST_FILE = TaskWidgetExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TaskWidget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -340,7 +460,7 @@
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 			};
 			name = Debug;
 		};
@@ -350,6 +470,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = TaskWidgetExtension/TaskWidgetExtension.entitlements;
 				INFOPLIST_FILE = TaskWidgetExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TaskWidget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -365,7 +486,7 @@
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 			};
 			name = Release;
 		};
@@ -400,6 +521,26 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		3D6FEB118D5FFFB2EB0E7F64 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		62B6C0AA0898B64580BCD9E7 /* KeyboardShortcuts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3D6FEB118D5FFFB2EB0E7F64 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
+			productName = KeyboardShortcuts;
+		};
+/* End XCSwiftPackageProductDependency section */
+
 	};
 	rootObject = DE8B8BD07D9B4A92BA54FC04 /* Project object */;
 }

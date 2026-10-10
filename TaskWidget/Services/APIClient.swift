@@ -24,6 +24,44 @@ struct NewTaskInput: Codable {
     let description: String?
 }
 
+/// Partial update for PATCH /api/tasks/:id. Nil fields are left unchanged.
+struct TaskPatch: Encodable {
+    enum DueDate {
+        case set(String)
+        case clear
+    }
+
+    var title: String?
+    var description: String?
+    var project: String?
+    var priority: Priority?
+    var dueDate: DueDate?
+    var completed: Bool?
+
+    private enum CodingKeys: String, CodingKey {
+        case title, description, project, priority, completed
+        case dueDate = "due_date"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(title, forKey: .title)
+        try c.encodeIfPresent(description, forKey: .description)
+        try c.encodeIfPresent(project, forKey: .project)
+        try c.encodeIfPresent(priority, forKey: .priority)
+        try c.encodeIfPresent(completed, forKey: .completed)
+        switch dueDate {
+        case .set(let day): try c.encode(day, forKey: .dueDate)
+        case .clear: try c.encodeNil(forKey: .dueDate)
+        case nil: break
+        }
+    }
+}
+
+private struct OkResponse: Decodable {
+    let ok: Bool
+}
+
 actor APIClient {
     static let shared = APIClient()
     private init() {}
@@ -102,6 +140,23 @@ actor APIClient {
         req.httpMethod = "POST"
         let result: TaskResponse = try await perform(req)
         return result.data
+    }
+
+    func updateTask(id: Int, _ patch: TaskPatch) async throws -> Task {
+        let url = try makeURL(path: "/api/tasks/\(id)")
+        var req = URLRequest(url: url)
+        req.httpMethod = "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(patch)
+        let result: TaskResponse = try await perform(req)
+        return result.data
+    }
+
+    func deleteTask(id: Int) async throws {
+        let url = try makeURL(path: "/api/tasks/\(id)")
+        var req = URLRequest(url: url)
+        req.httpMethod = "DELETE"
+        let _: OkResponse = try await perform(req)
     }
 
     func fetchProjects() async throws -> [String] {

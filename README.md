@@ -37,7 +37,7 @@ See [SETUP.md](SETUP.md) for installation and development guide.
 
 ## API
 
-Backend: `localhost:3210/api/tasks`
+Backend: Rust server in [`backend/`](backend/README.md) on `127.0.0.1:3220/api/tasks`
 
 Full API spec in [SETUP.md](SETUP.md#api-contract).
 
@@ -75,4 +75,4 @@ Swift/SwiftUI App
 
 ## License
 
-Private project. See [multi-agent](../multi-agent) backend for details.
+Private project.

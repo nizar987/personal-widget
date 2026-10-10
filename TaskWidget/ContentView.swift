@@ -1,315 +1,144 @@
 import SwiftUI
 
-struct ContentView: View {
-    @State private var tasks: [Task] = []
-    @State private var projects: [String] = []
-    @State private var showError = false
-    @State private var errorMessage = ""
-    @State private var isLoading = true
+/// Breakpoints for the responsive detail area.
+private enum DetailLayout {
+    /// Below this detail width the editor opens as a sheet instead of a side panel.
+    static let dockThreshold: CGFloat = 660
 
-    @State private var newTitle: String = ""
-    @State private var newProject: String = ""
-    @State private var newPriority: Priority = .medium
-    @State private var newDueDate: Date = Date()
-    @State private var newHasDate = true
-    @State private var isSaving = false
+    static func panelWidth(for detailWidth: CGFloat) -> CGFloat {
+        min(360, max(300, detailWidth * 0.36))
+    }
+}
+
+struct ContentView: View {
+    let store: TaskStore
+    @State private var selection: SidebarItem? = .smart(.today)
+    @State private var selectedTaskID: Int?
+    @State private var search = ""
+    @FocusState private var quickAddFocused: Bool
+
+    private var currentItem: SidebarItem { selection ?? .smart(.today) }
+    private var selectedTask: Task? { store.task(id: selectedTaskID) }
 
     var body: some View {
-        HStack(spacing: 0) {
-            addPanel
-                .frame(width: 280)
-                .background(Color(nsColor: .windowBackgroundColor))
-            Divider()
-            listPanel
+        NavigationSplitView {
+            SidebarView(selection: $selection, store: store)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 280)
+        } detail: {
+            GeometryReader { geo in
+                detail(width: geo.size.width)
+            }
+            .navigationTitle(currentItem.title)
         }
-        .task { await load() }
-        .alert("Error", isPresented: $showError) {
+        .searchable(text: $search, placement: .toolbar, prompt: "Search tasks")
+        .toolbar { toolbar }
+        .task { await store.load() }
+        .onChange(of: selection) { selectedTaskID = nil }
+        .alert("Something went wrong", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(errorMessage)
+            Text(store.errorMessage ?? "")
         }
     }
 
-    // MARK: - Add Panel
+    // MARK: - Responsive detail
 
-    private var addPanel: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("New Task").font(.headline)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Title").font(.caption).foregroundStyle(.secondary)
-                TextField("Task title", text: $newTitle)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Project").font(.caption).foregroundStyle(.secondary)
-                TextField("Project name", text: $newProject)
-                    .textFieldStyle(.roundedBorder)
-                if !projects.isEmpty {
-                    FlowLayout(spacing: 5) {
-                        ForEach(projects, id: \.self) { p in
-                            Button(p) { newProject = p }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                                .font(.caption)
-                        }
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Priority").font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    ForEach(Priority.allCases) { p in
-                        Button {
-                            newPriority = p
-                        } label: {
-                            HStack(spacing: 3) {
-                                Circle().fill(color(for: p)).frame(width: 7, height: 7)
-                                Text(p.displayName).font(.caption)
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .tint(newPriority == p ? color(for: p) : nil)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Due date").font(.caption).foregroundStyle(.secondary)
-                Toggle("Has due date", isOn: $newHasDate).controlSize(.small)
-                if newHasDate {
-                    DatePicker("", selection: $newDueDate, displayedComponents: .date)
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
-                }
-            }
-
-            Spacer()
-
-            Button {
-                _Concurrency.Task { await submit() }
-            } label: {
-                HStack {
-                    if isSaving { ProgressView().controlSize(.small) }
-                    Text("Add Task").frame(maxWidth: .infinity)
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!canSubmit || isSaving)
-        }
-        .padding(16)
-    }
-
-
-    // MARK: - List Panel
-
-    private var listPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Tasks").font(.headline)
-                Spacer()
-                Button {
-                    _Concurrency.Task { await load() }
-                } label: {
-                    Image(systemName: "arrow.clockwise").font(.caption)
-                }
-                .help("Refresh")
-            }
-
-            if isLoading {
-                Spacer()
-                ProgressView("Loading…").frame(maxWidth: .infinity)
-                Spacer()
-            } else if tasks.isEmpty {
-                Spacer()
-                VStack(spacing: 6) {
-                    Text("No tasks yet").font(.headline)
-                    Text("Add your first task using the panel on the left.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
+    /// Wide: list + docked editor panel. Narrow: full-width list, editor in a sheet.
+    private func detail(width: CGFloat) -> some View {
+        let docked = width >= DetailLayout.dockThreshold
+        return HStack(spacing: 0) {
+            mainContent
                 .frame(maxWidth: .infinity)
-                Spacer()
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 6) {
-                        ForEach(tasks) { t in
-                            TaskRow(task: t) {
-                                _Concurrency.Task { await toggle(t.id) }
-                            }
-                        }
-                    }
-                }
+            if docked, let task = selectedTask {
+                Divider()
+                editor(for: task)
+                    .frame(width: DetailLayout.panelWidth(for: width))
+                    .background(Color.primary.opacity(0.025))
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .padding(16)
-    }
-
-    // MARK: - Data
-
-    private var canSubmit: Bool {
-        !newTitle.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !newProject.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
-    private func color(for p: Priority) -> Color {
-        switch p {
-        case .low:    return .green
-        case .medium: return .orange
-        case .high:   return .red
-        }
-    }
-
-    private func load() async {
-        isLoading = true
-        do {
-            async let t = APIClient.shared.fetchTasks(completed: false)
-            async let p = APIClient.shared.fetchProjects()
-            tasks = try await t
-            projects = try await p
-        } catch {
-            errorMessage = error.localizedDescription
-            showError = true
-        }
-        isLoading = false
-    }
-
-    private func submit() async {
-        isSaving = true
-        defer { isSaving = false }
-        let dueDate = newHasDate ? Self.isoDate(newDueDate) : nil
-        do {
-            let created = try await APIClient.shared.createTask(NewTaskInput(
-                title: newTitle.trim(),
-                project: newProject.trim(),
-                priority: newPriority,
-                due_date: dueDate,
-                description: nil
-            ))
-            tasks.insert(created, at: 0)
-            if !projects.contains(newProject.trim()) {
-                projects.append(newProject.trim()); projects.sort()
+        .animation(AppStyle.spring, value: docked && selectedTask != nil)
+        .sheet(isPresented: sheetBinding(docked: docked)) {
+            if let task = selectedTask {
+                editor(for: task)
+                    .frame(width: 400, height: 600)
             }
-            newTitle = ""
-        } catch {
-            errorMessage = error.localizedDescription
-            showError = true
         }
     }
 
-    private func toggle(_ id: Int) async {
-        do {
-            let updated = try await APIClient.shared.toggleTask(id: id)
-            if let i = tasks.firstIndex(where: { $0.id == id }) {
-                tasks[i] = updated
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-            showError = true
+    @ViewBuilder
+    private var mainContent: some View {
+        switch currentItem {
+        case .calendar:
+            CalendarView(store: store, selectedTaskID: $selectedTaskID, search: search,
+                         quickAddFocus: $quickAddFocused)
+        case .report:
+            WeeklyReportView(store: store, weekStart: reportWeekBinding, selectedTaskID: $selectedTaskID)
+        case .smart, .project:
+            TaskListView(item: currentItem, store: store, selectedTaskID: $selectedTaskID,
+                         search: search, quickAddFocus: $quickAddFocused)
         }
     }
 
-    static func isoDate(_ d: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        f.locale = Locale(identifier: "en_US_POSIX")
-        return f.string(from: d)
+    /// Week navigation inside the report updates the sidebar selection.
+    private var reportWeekBinding: Binding<Date> {
+        Binding(
+            get: {
+                if case .report(let start) = currentItem { return start }
+                return WeekRange.start(of: Date())
+            },
+            set: { selection = .report(weekStart: $0) }
+        )
     }
-}
 
-// MARK: - TaskRow
+    private func editor(for task: Task) -> some View {
+        TaskEditorView(
+            task: task,
+            projects: store.projects,
+            onSave: { patch in _Concurrency.Task { await store.update(task, patch) } },
+            onToggle: { _Concurrency.Task { await store.toggle(task) } },
+            onDelete: {
+                selectedTaskID = nil
+                _Concurrency.Task { await store.delete(task) }
+            },
+            onClose: { selectedTaskID = nil }
+        )
+    }
 
-struct TaskRow: View {
-    let task: Task
-    let onToggle: () -> Void
+    // MARK: - Toolbar
 
-    var body: some View {
-        HStack(spacing: 8) {
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
             Button {
-                onToggle()
+                _Concurrency.Task { await store.load() }
             } label: {
-                Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
-                    .foregroundColor(task.completed ? .green : .secondary)
+                Label("Refresh", systemImage: "arrow.clockwise")
             }
-            .buttonStyle(.plain)
+            .keyboardShortcut("r", modifiers: .command)
+            .help("Refresh (⌘R)")
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(task.title).font(.body)
-                    if task.completed {
-                        Text("(done)").font(.caption).foregroundStyle(.secondary)
-                    }
+            Button {
+                if selection == .smart(.completed) || !currentItem.isTaskList && currentItem != .calendar {
+                    selection = .smart(.today)
                 }
-                HStack(spacing: 6) {
-                    Text(task.project)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(Color.secondary.opacity(0.15))
-                        .cornerRadius(3)
-
-                    Circle().fill(colorFor(task.priority)).frame(width: 6, height: 6)
-                    Text(task.priority.displayName)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-
-                    if let dd = task.dueDate {
-                        Text(dd).font(.caption2).foregroundStyle(.secondary)
-                    }
-                }
+                quickAddFocused = true
+            } label: {
+                Label("New Task", systemImage: "plus")
             }
-            Spacer()
-        }
-        .padding(8)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
-        .cornerRadius(6)
-    }
-
-    private func colorFor(_ p: Priority) -> Color {
-        switch p {
-        case .low: return .green
-        case .medium: return .orange
-        case .high: return .red
+            .keyboardShortcut("n", modifiers: .command)
+            .help("New Task (⌘N)")
         }
     }
-}
 
-// MARK: - FlowLayout
+    // MARK: - Bindings
 
-struct FlowLayout: Layout {
-    let spacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let w = proposal.replacingUnspecifiedDimensions().width
-        var h: CGFloat = 0, cx: CGFloat = 0, row: CGFloat = 0
-        for sv in subviews {
-            let s = sv.sizeThatFits(.unspecified)
-            if cx + s.width > w { cx = 0; row += s.height + spacing }
-            cx += s.width + spacing
-            h = max(h, row + s.height)
-        }
-        return CGSize(width: w, height: h)
+    private func sheetBinding(docked: Bool) -> Binding<Bool> {
+        Binding(get: { !docked && selectedTask != nil }, set: { if !$0 && !docked { selectedTaskID = nil } })
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var cx: CGFloat = 0, cy: CGFloat = 0
-        for sv in subviews {
-            let s = sv.sizeThatFits(.unspecified)
-            if cx + s.width > bounds.width { cx = 0; cy += s.height + spacing }
-            sv.place(at: CGPoint(x: bounds.minX + cx, y: bounds.minY + cy), proposal: .unspecified)
-            cx += s.width + spacing
-        }
-    }
-}
-
-// MARK: - String ext
-
-extension String {
-    func trim() -> String {
-        self.trimmingCharacters(in: .whitespaces)
+    private var errorBinding: Binding<Bool> {
+        Binding(get: { store.errorMessage != nil && !store.isOffline },
+                set: { if !$0 { store.errorMessage = nil } })
     }
 }

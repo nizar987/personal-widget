@@ -6,7 +6,7 @@ Native macOS app to create and manage tasks, with calendar integration.
 
 - **Xcode 15+** (Swift 5.9+)
 - **macOS 13+** deployment target
-- **Backend**: `multi-agent` running on `localhost:3210`
+- **Backend**: Rust server in `backend/` on `127.0.0.1:3220` — install once with `./backend/scripts/install-launch-agent.sh` (needs [rustup](https://rustup.rs))
 
 ## Quick Start
 
@@ -25,7 +25,7 @@ Native macOS app to create and manage tasks, with calendar integration.
 
 ## API Contract
 
-Backend: `localhost:3210/api/tasks`
+Backend: `127.0.0.1:3220/api/tasks` (full reference: [backend/README.md](backend/README.md))
 
 ### GET /api/tasks
 Query params: `view=today|week|projects|all`
@@ -105,7 +105,7 @@ No unit tests configured yet. Manual smoke test:
 
 ## Known Issues
 
-- Base URL hardcoded to `localhost:3210` (OK for MVP)
+- Base URL set in `Shared/Constants.swift` (`127.0.0.1:3220`)
 - No offline support (design trade-off)
 - Widget only syncs every 15 minutes (WidgetKit limitation)
 
@@ -120,4 +120,4 @@ Not configured for App Store submission yet. For distribution:
 
 ## Support
 
-See `multi-agent` backend project for API details.
+See [backend/README.md](backend/README.md) for API details.

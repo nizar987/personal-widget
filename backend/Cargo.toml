@@ -1,0 +1,31 @@
+[package]
+name = "taskwidget-server"
+version = "0.1.0"
+edition = "2021"
+description = "Local REST backend for the TaskWidget macOS app and widget"
+publish = false
+
+[[bin]]
+name = "taskwidget-server"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.7"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ureq = { version = "2", default-features = false, features = ["json"] }
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

@@ -1,7 +1,7 @@
 # TaskWidget Project Structure
 
 ## Overview
-TaskWidget adalah aplikasi macOS native untuk manajemen tugas terintegrasi dengan Calendar. Project ini terpisah sepenuhnya dari `multi-agent` repo.
+TaskWidget adalah aplikasi macOS native untuk manajemen tugas terintegrasi dengan Calendar. Backend-nya server Rust tersendiri di folder `backend/`.
 
 ### Lokasi
 ```
@@ -43,7 +43,7 @@ TaskWidget/
 ## Architecture
 
 ### Backend Integration
-- **API Base**: `http://localhost:3210` (hardcoded, configurable in `Shared/Constants.swift`)
+- **API Base**: `http://127.0.0.1:3220` (configurable in `Shared/Constants.swift`)
 - **Endpoints**:
   - `GET /api/tasks?view=today` — fetch today's tasks
   - `GET /api/tasks?view=week` — fetch this week's tasks
@@ -90,8 +90,8 @@ Calendar Sync (EventKit)
 ### Prerequisites
 - macOS 13+
 - Xcode 15+
-- Node.js 24+ (untuk backend API berjalan di `localhost:3210`)
-- Backend running (multi-agent repository)
+- Rust (rustup) untuk backend di `backend/`
+- Backend running: `./backend/scripts/install-launch-agent.sh` (auto-start saat login)
 
 ### Setup
 ```bash
@@ -124,9 +124,10 @@ open TaskWidget.xcodeproj
 
 ## Troubleshooting
 
-### "Cannot connect to localhost:3210"
-- Backend not running? Start: `cd /Users/muhammadnizaraulia/multi-agent && npm run dev`
-- Port in use? Check: `lsof -i :3210`
+### "Cannot connect to 127.0.0.1:3220"
+- Backend not running? `launchctl kickstart -k gui/$(id -u)/com.taskwidget.server` or `cd backend && cargo run --release`
+- Logs: `~/Library/Logs/TaskWidget/server.log`
+- Port in use? Check: `lsof -i :3220`
 - API URL wrong? Edit: `Shared/Constants.swift` → `API_BASE_URL`
 
 ### Widget not updating
