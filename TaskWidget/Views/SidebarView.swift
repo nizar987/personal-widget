@@ -14,6 +14,9 @@ struct SidebarView: View {
             Section("Planner") {
                 row(.calendar)
             }
+            Section("Notes") {
+                row(.notes)
+            }
             Section("Weekly Reports") {
                 ForEach(WeekRange.recent(6), id: \.self) { start in
                     row(.report(weekStart: start))
@@ -62,7 +65,7 @@ struct SidebarView: View {
     private func badgeCount(for item: SidebarItem) -> Int {
         switch item {
         case .report(let start): return WeeklyReport(tasks: store.tasks, weekStart: start).completed.count
-        case .calendar: return 0
+        case .calendar, .notes: return 0
         case .smart, .project: return item.matching(store.tasks, now: Date()).count
         }
     }

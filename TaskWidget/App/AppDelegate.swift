@@ -14,6 +14,8 @@ extension Notification.Name {
     /// Post from anywhere (Shortcuts, scripts) to open quick capture:
     /// `DistributedNotificationCenter.default().post(name: .init("com.multiagent.taskwidget.quickCapture"), object: nil)`
     static let quickCaptureRequest = Notification.Name("com.multiagent.taskwidget.quickCapture")
+    /// Same routes as `taskwidget://` URLs; `object` is the URL string. Handy for scripts and tests.
+    static let linkRequest = Notification.Name("com.multiagent.taskwidget.link")
 }
 
 enum WindowID {
@@ -46,7 +48,9 @@ enum WindowOpener {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = TaskStore()
-    private(set) lazy var quickCapture = QuickCaptureController(store: store)
+    let noteStore = NoteStore()
+    let router = AppRouter()
+    private(set) lazy var quickCapture = QuickCaptureController(store: store, noteStore: noteStore)
     private var refreshTimer: Timer?
     private static let refreshInterval: TimeInterval = 5 * 60
 
@@ -72,6 +76,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated {
                 quickCaptureLog.info("quick capture requested via notification")
                 self?.quickCapture.show()
+            }
+        }
+        DistributedNotificationCenter.default().addObserver(
+            forName: .linkRequest, object: nil, queue: .main
+        ) { [weak self] note in
+            let raw = note.object as? String
+            MainActor.assumeIsolated {
+                if let raw, let url = URL(string: raw) { self?.application(NSApp, open: [url]) }
             }
         }
         _Concurrency.Task { await store.load() }
@@ -101,6 +113,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshInBackground() {
         _Concurrency.Task { await store.load() }
+    }
+
+    /// `taskwidget://` links from the widget.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard let link = AppLink(url: url) else {
+                quickCaptureLog.error("ignored unknown link \(url.absoluteString, privacy: .public)")
+                continue
+            }
+            quickCaptureLog.info("open link \(url.absoluteString, privacy: .public)")
+            switch link {
+            case .quickCapture:
+                quickCapture.show()
+            case .open:
+                showMainWindow()
+            case .task(let id):
+                router.requestedTaskID = id
+                showMainWindow()
+            }
+        }
     }
 
     /// Closing the window keeps the app alive in the menu bar.

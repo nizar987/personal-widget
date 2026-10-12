@@ -12,6 +12,8 @@ private enum DetailLayout {
 
 struct ContentView: View {
     let store: TaskStore
+    let noteStore: NoteStore
+    let router: AppRouter
     @State private var selection: SidebarItem? = .smart(.today)
     @State private var selectedTaskID: Int?
     @State private var search = ""
@@ -34,11 +36,21 @@ struct ContentView: View {
         .toolbar { toolbar }
         .task { await store.load() }
         .onChange(of: selection) { selectedTaskID = nil }
+        .onChange(of: router.requestedTaskID, initial: true) { _, id in openRequestedTask(id) }
         .alert("Something went wrong", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(store.errorMessage ?? "")
         }
+    }
+
+    /// Deep link from the widget: show All Tasks (or Completed) with the task's editor open.
+    private func openRequestedTask(_ id: Int?) {
+        guard let id else { return }
+        router.requestedTaskID = nil
+        selection = store.task(id: id)?.completed == true ? .smart(.completed) : .smart(.all)
+        // After the selection change has cleared the previous editor.
+        _Concurrency.Task { @MainActor in selectedTaskID = id }
     }
 
     // MARK: - Responsive detail
@@ -74,6 +86,8 @@ struct ContentView: View {
                          quickAddFocus: $quickAddFocused)
         case .report:
             WeeklyReportView(store: store, weekStart: reportWeekBinding, selectedTaskID: $selectedTaskID)
+        case .notes:
+            NotesView(store: noteStore)
         case .smart, .project:
             TaskListView(item: currentItem, store: store, selectedTaskID: $selectedTaskID,
                          search: search, quickAddFocus: $quickAddFocused)

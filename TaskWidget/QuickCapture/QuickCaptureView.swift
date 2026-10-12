@@ -8,7 +8,7 @@ private struct QuickCaptureSizeKey: PreferenceKey {
 struct QuickCaptureView: View {
     let session: QuickCaptureSession
     /// Returns true when saved. `keepOpen` is ⇧↵ ("add another").
-    let onSave: (QuickCaptureDraft, _ keepOpen: Bool) async -> Bool
+    let onSave: (QuickCaptureDraft, _ mode: QuickCaptureMode, _ keepOpen: Bool) async -> Bool
     let onClose: () -> Void
     /// Reports the content size so the panel can grow/shrink (e.g. when an error appears).
     var onSizeChange: (CGSize) -> Void = { _ in }
@@ -21,18 +21,32 @@ struct QuickCaptureView: View {
         QuickCaptureParser.parse(session.text, projects: session.projects)
     }
 
+    /// Note text with the `//` shortcut prefix stripped, when used.
+    private var noteText: String {
+        var t = session.text
+        if t.hasPrefix("//") { t = String(t.dropFirst(2)) }
+        return t.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// `//` at the start forces note mode without touching the picker.
+    private var effectiveMode: QuickCaptureMode {
+        session.text.hasPrefix("//") ? .note : session.mode
+    }
+
     var body: some View {
         @Bindable var session = session
         let draft = draft
         let suggestions = session.suggestions
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
-                Image(systemName: savedPulse > 0 && !isSaving ? "checkmark.circle.fill" : "plus.circle.fill")
+                Image(systemName: savedPulse > 0 && !isSaving
+                      ? "checkmark.circle.fill"
+                      : (effectiveMode == .note ? "note.text" : "plus.circle.fill"))
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(savedPulse > 0 && !isSaving ? Palette.done : Color.accentColor)
                     .contentTransition(.symbolEffect(.replace))
                     .symbolEffect(.bounce, value: savedPulse)
-                TextField("New task…", text: $session.text)
+                TextField(effectiveMode == .note ? "New note…" : "New task…", text: $session.text)
                     .textFieldStyle(.plain)
                     .font(.system(size: 22, weight: .medium, design: .rounded))
                     .focused($focused)
@@ -45,7 +59,7 @@ struct QuickCaptureView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 16)
 
-            if !suggestions.isEmpty {
+            if effectiveMode == .task && !suggestions.isEmpty {
                 SuggestionList(suggestions: suggestions,
                                selectedIndex: min(session.selectedIndex, suggestions.count - 1),
                                onHover: { session.selectedIndex = $0 },
@@ -61,7 +75,10 @@ struct QuickCaptureView: View {
             Divider().opacity(0.5)
 
             HStack(spacing: 6) {
-                if session.text.isEmpty {
+                modePicker
+                if effectiveMode == .note {
+                    Chip(text: "Note", icon: "note.text", tint: Palette.upcoming)
+                } else if session.text.isEmpty {
                     syntaxHint
                 } else {
                     Chip(text: draft.project ?? session.defaultProject, icon: "folder",
@@ -72,7 +89,7 @@ struct QuickCaptureView: View {
                          tint: draft.due == nil ? .secondary : Palette.upcoming)
                 }
                 Spacer(minLength: 8)
-                keyHint(completing: !suggestions.isEmpty)
+                keyHint(completing: effectiveMode == .task && !suggestions.isEmpty)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -106,6 +123,32 @@ struct QuickCaptureView: View {
         }
     }
 
+    private var modePicker: some View {
+        HStack(spacing: 2) {
+            ForEach(QuickCaptureMode.allCases, id: \.rawValue) { mode in
+                Button {
+                    session.mode = mode
+                    // Drop the `//` prefix when switching back to task manually.
+                    if mode == .task, session.text.hasPrefix("//") {
+                        session.text = String(session.text.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                    }
+                } label: {
+                    Label(mode.title, systemImage: mode.icon)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule().fill(effectiveMode == mode ? Color.accentColor.opacity(0.18) : Color.clear)
+                        )
+                        .foregroundStyle(effectiveMode == mode ? Color.accentColor : .secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(Capsule().fill(Color.primary.opacity(0.05)))
+    }
+
     private var syntaxHint: some View {
         HStack(spacing: 10) {
             hintToken("#project")
@@ -136,15 +179,22 @@ struct QuickCaptureView: View {
     }
 
     private func submit(keepOpen: Bool) {
-        let current = draft
+        var current = draft
+        if effectiveMode == .note {
+            current = QuickCaptureDraft(title: noteText, project: nil, priority: nil, due: nil)
+        }
         guard !current.title.trimmingCharacters(in: .whitespaces).isEmpty, !isSaving else {
-            session.errorMessage = session.text.isEmpty ? nil : "Add a title, not just #project / !priority / date."
+            if effectiveMode == .note {
+                session.errorMessage = session.text.isEmpty ? nil : "Write something for the note."
+            } else {
+                session.errorMessage = session.text.isEmpty ? nil : "Add a title, not just #project / !priority / date."
+            }
             return
         }
         session.errorMessage = nil
         isSaving = true
         _Concurrency.Task {
-            let saved = await onSave(current, keepOpen)
+            let saved = await onSave(current, effectiveMode, keepOpen)
             isSaving = false
             if saved {
                 savedPulse += 1

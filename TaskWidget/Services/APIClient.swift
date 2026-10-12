@@ -165,4 +165,44 @@ actor APIClient {
         let result: ProjectsResponse = try await perform(req)
         return result.data.filter { !$0.isEmpty }
     }
+
+    // MARK: - Notes
+
+    func fetchNotes(search: String? = nil, limit: Int? = nil) async throws -> [Note] {
+        var q: [URLQueryItem] = []
+        if let search, !search.isEmpty { q.append(.init(name: "search", value: search)) }
+        if let limit { q.append(.init(name: "limit", value: String(limit))) }
+        let url = try makeURL(path: "/api/notes", query: q)
+        let req = URLRequest(url: url)
+        let result: NoteListResponse = try await perform(req)
+        return result.data
+    }
+
+    func createNote(content: String) async throws -> Note {
+        let url = try makeURL(path: "/api/notes")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["content": content])
+        let result: NoteResponse = try await perform(req)
+        return result.data
+    }
+
+    func updateNote(id: Int, content: String) async throws -> Note {
+        let url = try makeURL(path: "/api/notes/\(id)")
+        var req = URLRequest(url: url)
+        req.httpMethod = "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["content": content])
+        let result: NoteResponse = try await perform(req)
+        return result.data
+    }
+
+    func deleteNote(id: Int) async throws {
+        let url = try makeURL(path: "/api/notes/\(id)")
+        var req = URLRequest(url: url)
+        req.httpMethod = "DELETE"
+        let _: OkResponse = try await perform(req)
+    }
 }
+

@@ -44,6 +44,7 @@ enum SidebarItem: Hashable {
     case smart(SmartList)
     case project(String)
     case calendar
+    case notes
     /// Weekly report for the week starting at this local midnight.
     case report(weekStart: Date)
 
@@ -52,6 +53,7 @@ enum SidebarItem: Hashable {
         case .smart(let list): return list.title
         case .project(let name): return name
         case .calendar: return "Calendar"
+        case .notes: return "Notes"
         case .report(let start): return WeekRange.title(for: start)
         }
     }
@@ -61,6 +63,7 @@ enum SidebarItem: Hashable {
         case .smart(let list): return list.icon
         case .project: return "folder.fill"
         case .calendar: return "calendar"
+        case .notes: return "note.text"
         case .report: return "chart.bar.fill"
         }
     }
@@ -70,6 +73,7 @@ enum SidebarItem: Hashable {
         case .smart(let list): return list.accent
         case .project: return Palette.project
         case .calendar: return Palette.today
+        case .notes: return Palette.upcoming
         case .report: return Palette.done
         }
     }
@@ -78,7 +82,7 @@ enum SidebarItem: Hashable {
     var isTaskList: Bool {
         switch self {
         case .smart, .project: return true
-        case .calendar, .report: return false
+        case .calendar, .notes, .report: return false
         }
     }
 }
@@ -120,7 +124,7 @@ extension SidebarItem {
         case .smart(.all): return tasks.filter { !$0.completed }
         case .smart(.completed): return tasks.filter(\.completed)
         case .project(let name): return tasks.filter { $0.project == name && !$0.completed }
-        case .calendar, .report: return []
+        case .calendar, .notes, .report: return []
         }
     }
 
@@ -146,7 +150,7 @@ extension SidebarItem {
             return Self.compact([section(title, title, icon, accent, items)])
         case .smart(.all):
             return Self.grouped(source, now: now)
-        case .calendar, .report:
+        case .calendar, .notes, .report:
             return []
         case .project(let name):
             let mine = source.filter { $0.project == name }

@@ -3,9 +3,18 @@ import Observation
 
 /// State shared between the panel controller and its SwiftUI content: the typed text,
 /// autocomplete suggestions and their keyboard selection.
+enum QuickCaptureMode: String, CaseIterable {
+    case task, note
+
+    var title: String { rawValue.capitalized }
+    var icon: String { self == .task ? "checkmark.circle" : "note.text" }
+}
+
 @Observable
 @MainActor
 final class QuickCaptureSession {
+    /// Task or note. Notes skip the task parser — the text is saved as-is.
+    var mode: QuickCaptureMode = .task
     var text = "" {
         didSet {
             guard text != oldValue else { return }

@@ -67,12 +67,14 @@ enum QuickCaptureLayout {
 @MainActor
 final class QuickCaptureController {
     private let store: TaskStore
+    private let noteStore: NoteStore
     private let session = QuickCaptureSession()
     private lazy var panel: QuickCapturePanel = makePanel()
     private var keyMonitor: Any?
 
-    init(store: TaskStore) {
+    init(store: TaskStore, noteStore: NoteStore) {
         self.store = store
+        self.noteStore = noteStore
     }
 
     func toggle() {
@@ -118,8 +120,8 @@ final class QuickCaptureController {
     }
 
     private func makePanel() -> QuickCapturePanel {
-        let view = QuickCaptureView(session: session) { [weak self] draft, keepOpen in
-            await self?.save(draft, keepOpen: keepOpen) ?? false
+        let view = QuickCaptureView(session: session) { [weak self] draft, mode, keepOpen in
+            await self?.save(draft, mode: mode, keepOpen: keepOpen) ?? false
         } onClose: { [weak self] in
             self?.hide()
         } onSizeChange: { [weak self] size in
@@ -131,15 +133,19 @@ final class QuickCaptureController {
         return panel
     }
 
-    private func save(_ draft: QuickCaptureDraft, keepOpen: Bool) async -> Bool {
-        let project = draft.project ?? session.defaultProject
-        let ok = await store.create(title: draft.title, project: project,
+    private func save(_ draft: QuickCaptureDraft, mode: QuickCaptureMode, keepOpen: Bool) async -> Bool {
+        let ok: Bool
+        if mode == .note {
+            ok = await noteStore.create(content: draft.title)
+            if !ok { session.errorMessage = noteStore.errorMessage ?? "Couldn't save the note." }
+        } else {
+            let project = draft.project ?? session.defaultProject
+            ok = await store.create(title: draft.title, project: project,
                                     priority: draft.priority ?? .medium, due: draft.due)
-        guard ok else {
-            session.errorMessage = store.errorMessage ?? "Couldn't save the task."
-            return false
+            if !ok { session.errorMessage = store.errorMessage ?? "Couldn't save the task." }
         }
-        if draft.project != nil { session.rememberProject(project) }
+        guard ok else { return false }
+        if mode == .task, let project = draft.project { session.rememberProject(project) }
         if !keepOpen {
             try? await _Concurrency.Task.sleep(for: .milliseconds(350))
             hide()
