@@ -91,3 +91,31 @@ pub struct TaskFilter {
     pub due_from: Option<String>,
     pub due_to: Option<String>,
 }
+
+// MARK: - Notes
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Note {
+    pub id: i64,
+    pub content: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Validated input for creating a note.
+#[derive(Debug, Clone)]
+pub struct NewNote {
+    pub content: String,
+}
+
+/// Validated partial note update. Same convention as `TaskChanges`.
+#[derive(Debug, Clone, Default)]
+pub struct NoteChanges {
+    pub content: Option<String>,
+}
+
+impl NoteChanges {
+    pub fn is_empty(&self) -> bool {
+        self.content.is_none()
+    }
+}

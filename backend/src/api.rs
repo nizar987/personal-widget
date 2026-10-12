@@ -11,10 +11,15 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::model::{Priority, TaskFilter};
-use crate::repo::{RepoError, RepoResult, TaskRepo};
+use crate::repo::{NoteRepo, RepoError, RepoResult, TaskRepo};
 use crate::validation::{self, ValidationError};
 
 pub fn router(repo: TaskRepo) -> Router {
+    router_with_notes(repo, NoteRepo::in_memory().expect("in-memory notes"))
+}
+
+/// Production entry point: both repos share the same SQLite file.
+pub fn router_with_notes(repo: TaskRepo, notes: NoteRepo) -> Router {
     Router::new()
         .route("/api/health", get(health))
         .route("/api/tasks", get(list_tasks).post(create_task))
@@ -23,8 +28,20 @@ pub fn router(repo: TaskRepo) -> Router {
             get(get_task).patch(update_task).delete(delete_task),
         )
         .route("/api/tasks/:id/toggle", post(toggle_task))
+        .route("/api/notes", get(list_notes).post(create_note))
+        .route(
+            "/api/notes/:id",
+            get(get_note).patch(update_note).delete(delete_note),
+        )
         .fallback(|| async { ApiError::NotFound("not_found") })
-        .with_state(repo)
+        .with_state(AppState { tasks: repo, notes })
+}
+
+/// Shared state: one repo per resource.
+#[derive(Clone)]
+pub struct AppState {
+    pub tasks: TaskRepo,
+    pub notes: NoteRepo,
 }
 
 // MARK: - Errors
@@ -110,7 +127,8 @@ struct ListQuery {
     to: Option<String>,
 }
 
-async fn list_tasks(State(repo): State<TaskRepo>, Query(q): Query<ListQuery>) -> ApiResult {
+async fn list_tasks(State(state): State<AppState>, Query(q): Query<ListQuery>) -> ApiResult {
+    let repo = state.tasks;
     let today = Local::now().date_naive();
     let filter = match q.view.as_deref() {
         Some("projects") => return Ok(ok(blocking(repo, |r| r.projects()).await?)),
@@ -152,42 +170,131 @@ fn filter_from(q: &ListQuery) -> Result<TaskFilter, ApiError> {
 }
 
 async fn create_task(
-    State(repo): State<TaskRepo>,
+    State(state): State<AppState>,
     payload: Result<Json<Value>, JsonRejection>,
 ) -> ApiResult {
+    let repo = state.tasks;
     let input = validation::parse_new_task(&body(payload)?)?;
     let task = blocking(repo, move |r| r.create(&input)).await?;
     Ok((StatusCode::CREATED, ok(task)).into_response())
 }
 
-async fn get_task(State(repo): State<TaskRepo>, Path(id): Path<String>) -> ApiResult {
+async fn get_task(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    let repo = state.tasks;
     let id = parse_id(&id)?;
     let task = blocking(repo, move |r| r.get(id)).await?;
     task.map(ok).ok_or(ApiError::NotFound("task_not_found"))
 }
 
 async fn update_task(
-    State(repo): State<TaskRepo>,
+    State(state): State<AppState>,
     Path(id): Path<String>,
     payload: Result<Json<Value>, JsonRejection>,
 ) -> ApiResult {
+    let repo = state.tasks;
     let id = parse_id(&id)?;
     let changes = validation::parse_changes(&body(payload)?)?;
     let task = blocking(repo, move |r| r.update(id, &changes)).await?;
     task.map(ok).ok_or(ApiError::NotFound("task_not_found"))
 }
 
-async fn toggle_task(State(repo): State<TaskRepo>, Path(id): Path<String>) -> ApiResult {
+async fn toggle_task(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    let repo = state.tasks;
     let id = parse_id(&id)?;
     let task = blocking(repo, move |r| r.toggle(id)).await?;
     task.map(ok).ok_or(ApiError::NotFound("task_not_found"))
 }
 
-async fn delete_task(State(repo): State<TaskRepo>, Path(id): Path<String>) -> ApiResult {
+async fn delete_task(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    let repo = state.tasks;
     let id = parse_id(&id)?;
     if blocking(repo, move |r| r.delete(id)).await? {
         Ok(Json(json!({ "ok": true, "message": "deleted" })).into_response())
     } else {
         Err(ApiError::NotFound("task_not_found"))
     }
+}
+
+// MARK: - Note handlers
+
+#[derive(Debug, Deserialize)]
+struct NoteListQuery {
+    search: Option<String>,
+    limit: Option<String>,
+}
+
+const MAX_NOTE_LIMIT: i64 = 500;
+
+async fn list_notes(State(state): State<AppState>, Query(q): Query<NoteListQuery>) -> ApiResult {
+    let limit = match q.limit.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
+        Some(raw) => Some(
+            raw.parse::<i64>()
+                .ok()
+                .filter(|n| *n > 0)
+                .ok_or(ApiError::BadRequest("invalid_limit"))?
+                .min(MAX_NOTE_LIMIT),
+        ),
+        None => None,
+    };
+    let search = q
+        .search
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned);
+    let repo = state.notes;
+    Ok(ok(blocking_notes(repo, move |r| {
+        r.list(search.as_deref(), limit)
+    })
+    .await?))
+}
+
+async fn create_note(
+    State(state): State<AppState>,
+    payload: Result<Json<Value>, JsonRejection>,
+) -> ApiResult {
+    let input = validation::parse_new_note(&body(payload)?)?;
+    let note = blocking_notes(state.notes, move |r| r.create(&input)).await?;
+    Ok((StatusCode::CREATED, ok(note)).into_response())
+}
+
+async fn get_note(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    let id = parse_id(&id)?;
+    let note = blocking_notes(state.notes, move |r| r.get(id)).await?;
+    note.map(ok).ok_or(ApiError::NotFound("note_not_found"))
+}
+
+async fn update_note(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    payload: Result<Json<Value>, JsonRejection>,
+) -> ApiResult {
+    let id = parse_id(&id)?;
+    let changes = validation::parse_note_changes(&body(payload)?)?;
+    let note = blocking_notes(state.notes, move |r| r.update(id, &changes)).await?;
+    note.map(ok).ok_or(ApiError::NotFound("note_not_found"))
+}
+
+async fn delete_note(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    let id = parse_id(&id)?;
+    if blocking_notes(state.notes, move |r| r.delete(id)).await? {
+        Ok(Json(json!({ "ok": true, "message": "deleted" })).into_response())
+    } else {
+        Err(ApiError::NotFound("note_not_found"))
+    }
+}
+
+/// Same as `blocking` but for the notes repository.
+async fn blocking_notes<T, F>(repo: NoteRepo, work: F) -> Result<T, ApiError>
+where
+    T: Send + 'static,
+    F: FnOnce(NoteRepo) -> RepoResult<T> + Send + 'static,
+{
+    tokio::task::spawn_blocking(move || work(repo))
+        .await
+        .map_err(|err| {
+            tracing::error!(error = %err, "blocking task panicked");
+            ApiError::Internal
+        })?
+        .map_err(ApiError::from)
 }

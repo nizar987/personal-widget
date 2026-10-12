@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use rusqlite::types::Value as SqlValue;
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
 
-use crate::model::{NewTask, Priority, Task, TaskChanges, TaskFilter};
+use crate::model::{NewNote, NewTask, Note, NoteChanges, Priority, Task, TaskChanges, TaskFilter};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RepoError {
@@ -37,6 +37,13 @@ const SCHEMA: &str = "
     CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
     CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project);
     CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(completed);
+    CREATE TABLE IF NOT EXISTS notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(updated_at);
 ";
 
 /// Sets `completed_at` only on an open → done transition (RHS sees the pre-update row).
@@ -333,6 +340,135 @@ impl RawTask {
             completed_at: self.completed_at,
         })
     }
+}
+
+// MARK: - Notes
+
+const NOTE_COLUMNS: &str = "id, content, created_at, updated_at";
+
+/// Newest notes first.
+const NOTE_ORDER: &str = "ORDER BY updated_at DESC, id DESC";
+
+/// SQLite-backed note repository, sharing the connection style of `TaskRepo`.
+#[derive(Clone)]
+pub struct NoteRepo {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl NoteRepo {
+    pub fn open(path: &Path) -> RepoResult<Self> {
+        let conn = Connection::open(path)?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "foreign_keys", "ON")?;
+        conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
+    }
+
+    pub fn in_memory() -> RepoResult<Self> {
+        let conn = Connection::open_in_memory()?;
+        conn.pragma_update(None, "foreign_keys", "ON")?;
+        conn.execute_batch(SCHEMA)?;
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
+    }
+
+    fn lock(&self) -> RepoResult<MutexGuard<'_, Connection>> {
+        self.conn.lock().map_err(|_| RepoError::Poisoned)
+    }
+
+    /// All notes, newest first. Optional case-insensitive substring search and limit.
+    pub fn list(&self, search: Option<&str>, limit: Option<i64>) -> RepoResult<Vec<Note>> {
+        let mut sql = format!("SELECT {NOTE_COLUMNS} FROM notes");
+        let mut values: Vec<SqlValue> = Vec::new();
+        if let Some(search) = search.filter(|s| !s.is_empty()) {
+            sql.push_str(" WHERE content LIKE ? ESCAPE '\\'");
+            values.push(format!("%{}%", escape_like(search)).into());
+        }
+        sql.push_str(&format!(" {NOTE_ORDER}"));
+        if let Some(limit) = limit.filter(|l| *l > 0) {
+            // Bound params can't be used for LIMIT here, and `limit` is a validated
+            // positive integer, so inline it as a literal.
+            sql.push_str(&format!(" LIMIT {limit}"));
+        }
+        let conn = self.lock()?;
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(values), read_note_row)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(RepoError::from)
+    }
+
+    pub fn get(&self, id: i64) -> RepoResult<Option<Note>> {
+        let conn = self.lock()?;
+        Self::get_locked(&conn, id)
+    }
+
+    fn get_locked(conn: &Connection, id: i64) -> RepoResult<Option<Note>> {
+        let sql = format!("SELECT {NOTE_COLUMNS} FROM notes WHERE id = ?1");
+        let raw = conn
+            .query_row(&sql, params![id], read_note_row)
+            .optional()?;
+        Ok(raw)
+    }
+
+    pub fn create(&self, note: &NewNote) -> RepoResult<Note> {
+        let conn = self.lock()?;
+        conn.execute(
+            "INSERT INTO notes (content) VALUES (?1)",
+            params![note.content],
+        )?;
+        let id = conn.last_insert_rowid();
+        Self::get_locked(&conn, id)?.ok_or(RepoError::Sqlite(rusqlite::Error::QueryReturnedNoRows))
+    }
+
+    /// Applies `changes`; returns `None` when the note doesn't exist.
+    pub fn update(&self, id: i64, changes: &NoteChanges) -> RepoResult<Option<Note>> {
+        let conn = self.lock()?;
+        if changes.is_empty() {
+            return Self::get_locked(&conn, id);
+        }
+        let mut sets = Vec::new();
+        let mut values: Vec<SqlValue> = Vec::new();
+        if let Some(v) = &changes.content {
+            sets.push("content = ?".to_owned());
+            values.push(v.clone().into());
+        }
+        values.push(id.into());
+        let sql = format!(
+            "UPDATE notes SET {}, updated_at = datetime('now') WHERE id = ?",
+            sets.join(", ")
+        );
+        let changed = conn.execute(&sql, params_from_iter(values))?;
+        if changed == 0 {
+            return Ok(None);
+        }
+        Self::get_locked(&conn, id)
+    }
+
+    /// Returns `false` when nothing was deleted.
+    pub fn delete(&self, id: i64) -> RepoResult<bool> {
+        let conn = self.lock()?;
+        Ok(conn.execute("DELETE FROM notes WHERE id = ?1", params![id])? > 0)
+    }
+}
+
+fn read_note_row(row: &Row<'_>) -> rusqlite::Result<Note> {
+    Ok(Note {
+        id: row.get(0)?,
+        content: row.get(1)?,
+        created_at: row.get(2)?,
+        updated_at: row.get(3)?,
+    })
+}
+
+/// Escapes the LIKE wildcards so a literal `%` or `_` in the query matches itself.
+fn escape_like(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
 }
 
 #[cfg(test)]

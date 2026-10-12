@@ -3,11 +3,12 @@
 use chrono::NaiveDate;
 use serde_json::{Map, Value};
 
-use crate::model::{NewTask, Priority, TaskChanges};
+use crate::model::{NewNote, NewTask, NoteChanges, Priority, TaskChanges};
 
 pub const MAX_TITLE: usize = 200;
 pub const MAX_DESCRIPTION: usize = 2000;
 pub const MAX_PROJECT: usize = 60;
+pub const MAX_NOTE_CONTENT: usize = 20000;
 
 /// Machine-readable validation failure, serialized as `{"ok":false,"error":"<code>"}`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,6 +151,36 @@ fn nullable_due_date(obj: &Map<String, Value>) -> Result<Option<Option<String>>>
         Some(Some(date)) if !is_valid_date(&date) => Err(ValidationError("invalid_due_date")),
         other => Ok(other),
     }
+}
+
+// MARK: - Notes
+
+/// A note requires non-empty content.
+pub fn parse_new_note(body: &Value) -> Result<NewNote> {
+    let obj = as_object(body)?;
+    let content = required_text(
+        obj,
+        "content",
+        MAX_NOTE_CONTENT,
+        "content_required",
+        "content_too_long",
+    )?;
+    Ok(NewNote { content })
+}
+
+pub fn parse_note_changes(body: &Value) -> Result<NoteChanges> {
+    let obj = as_object(body)?;
+    let mut changes = NoteChanges::default();
+    if obj.contains_key("content") {
+        changes.content = Some(required_text(
+            obj,
+            "content",
+            MAX_NOTE_CONTENT,
+            "content_required",
+            "content_too_long",
+        )?);
+    }
+    Ok(changes)
 }
 
 #[cfg(test)]

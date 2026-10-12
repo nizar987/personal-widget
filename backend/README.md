@@ -45,10 +45,16 @@ All responses use `{"ok": true, "data": …}` or `{"ok": false, "error": "<code>
 | `PATCH`  | `/api/tasks/:id`          | Any subset of fields; `"due_date": null` clears the date |
 | `DELETE` | `/api/tasks/:id`          | `{"ok": true, "message": "deleted"}` |
 | `POST`   | `/api/tasks/:id/toggle`   | Flips `completed` |
+| `GET`    | `/api/notes`              | Plain notes, newest first. `search=<substring>` (literal, case-insensitive), `limit=<n>` (1–500) |
+| `POST`   | `/api/notes`              | `content` required → `201` |
+| `GET`    | `/api/notes/:id`          | |
+| `PATCH`  | `/api/notes/:id`          | `content` |
+| `DELETE` | `/api/notes/:id`          | |
 
 Error codes: `invalid_json`, `invalid_id`, `title_required`, `title_too_long` (200),
 `project_required`, `project_too_long` (60), `description_too_long` (2000), `invalid_priority`,
-`invalid_due_date`, `invalid_completed`, `task_not_found`, `not_found`, `internal_error`.
+`invalid_due_date`, `invalid_completed`, `task_not_found`, `not_found`, `internal_error`,
+`content_required`, `content_too_long` (20000), `invalid_limit`, `note_not_found`.
 
 ## Develop
 

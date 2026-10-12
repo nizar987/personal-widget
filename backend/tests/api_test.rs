@@ -6,12 +6,15 @@ use axum::Router;
 use chrono::Local;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
-use taskwidget_server::api::router;
-use taskwidget_server::repo::TaskRepo;
+use taskwidget_server::api::router_with_notes;
+use taskwidget_server::repo::{NoteRepo, TaskRepo};
 use tower::ServiceExt;
 
 fn app() -> Router {
-    router(TaskRepo::in_memory().expect("in-memory db"))
+    router_with_notes(
+        TaskRepo::in_memory().expect("in-memory db"),
+        NoteRepo::in_memory().expect("in-memory db"),
+    )
 }
 
 async fn call(app: &Router, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
@@ -181,4 +184,145 @@ async fn malformed_json_is_reported() {
         .unwrap();
     let response = app.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+// MARK: - Notes
+
+async fn create_note(app: &Router, content: &str) -> Value {
+    let (status, body) = call(
+        app,
+        Method::POST,
+        "/api/notes",
+        Some(json!({"content": content})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    body["data"].clone()
+}
+
+#[tokio::test]
+async fn full_note_lifecycle() {
+    let app = app();
+    let note = create_note(&app, "Ide: tambah mode gelap").await;
+    let id = note["id"].as_i64().unwrap();
+    assert_eq!(note["content"], json!("Ide: tambah mode gelap"));
+    assert!(note["created_at"].is_string());
+
+    // Newest first.
+    let second = create_note(&app, "Belanja: kopi, susu").await;
+    let second_id = second["id"].as_i64().unwrap();
+    let (_, body) = call(&app, Method::GET, "/api/notes", None).await;
+    let notes = body["data"].as_array().unwrap();
+    assert_eq!(notes.len(), 2);
+    assert_eq!(notes[0]["id"], json!(second_id), "newest note first");
+
+    // Search filters by substring.
+    let (_, body) = call(&app, Method::GET, "/api/notes?search=kopi", None).await;
+    let found = body["data"].as_array().unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0]["id"], json!(second_id));
+
+    // Search matches literally, not as a LIKE pattern.
+    let (_, body) = call(&app, Method::GET, "/api/notes?search=%25", None).await;
+    assert_eq!(body["data"].as_array().unwrap().len(), 0);
+
+    // Limit caps the result size.
+    let (_, body) = call(&app, Method::GET, "/api/notes?limit=1", None).await;
+    assert_eq!(body["data"].as_array().unwrap().len(), 1);
+
+    // Update content.
+    let (status, body) = call(
+        &app,
+        Method::PATCH,
+        &format!("/api/notes/{id}"),
+        Some(json!({"content": "Ide: mode gelap + widget"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["content"], json!("Ide: mode gelap + widget"));
+
+    // Get one.
+    let (status, body) = call(&app, Method::GET, &format!("/api/notes/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["ok"], json!(true));
+
+    // Delete then 404.
+    let (status, _) = call(&app, Method::DELETE, &format!("/api/notes/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(&app, Method::GET, &format!("/api/notes/{id}"), None).await;
+    assert_eq!(
+        (status, body),
+        (
+            StatusCode::NOT_FOUND,
+            json!({"ok": false, "error": "note_not_found"})
+        )
+    );
+}
+
+#[tokio::test]
+async fn note_validation_rejects_bad_input() {
+    let app = app();
+    let cases = [
+        (json!({}), "content_required"),
+        (json!({"content": "   "}), "content_required"),
+        (json!({"content": 42}), "content_required"),
+        (json!({"content": "x".repeat(20001)}), "content_too_long"),
+    ];
+    for (payload, code) in cases {
+        let (status, body) = call(&app, Method::POST, "/api/notes", Some(payload)).await;
+        assert_eq!(
+            (status, &body),
+            (
+                StatusCode::BAD_REQUEST,
+                &json!({"ok": false, "error": code})
+            ),
+            "payload should fail with {code}"
+        );
+    }
+
+    // Empty update is rejected too.
+    let note = create_note(&app, "ok").await;
+    let id = note["id"].as_i64().unwrap();
+    let (status, body) = call(
+        &app,
+        Method::PATCH,
+        &format!("/api/notes/{id}"),
+        Some(json!({"content": "  "})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], json!("content_required"));
+
+    // Invalid id / limit / unknown id.
+    let (status, body) = call(&app, Method::GET, "/api/notes/abc", None).await;
+    assert_eq!(
+        (status, body["error"].clone()),
+        (StatusCode::BAD_REQUEST, json!("invalid_id"))
+    );
+    let (status, body) = call(&app, Method::GET, "/api/notes?limit=-3", None).await;
+    assert_eq!(
+        (status, body["error"].clone()),
+        (StatusCode::BAD_REQUEST, json!("invalid_limit"))
+    );
+    let (status, body) = call(&app, Method::GET, "/api/notes/9999", None).await;
+    assert_eq!(
+        (status, body["error"].clone()),
+        (StatusCode::NOT_FOUND, json!("note_not_found"))
+    );
+    let (status, body) = call(
+        &app,
+        Method::PATCH,
+        "/api/notes/9999",
+        Some(json!({"content": "x"})),
+    )
+    .await;
+    assert_eq!(
+        (status, body["error"].clone()),
+        (StatusCode::NOT_FOUND, json!("note_not_found"))
+    );
+    let (status, body) = call(&app, Method::DELETE, "/api/notes/9999", None).await;
+    assert_eq!(
+        (status, body["error"].clone()),
+        (StatusCode::NOT_FOUND, json!("note_not_found"))
+    );
 }
