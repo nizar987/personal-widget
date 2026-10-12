@@ -40,6 +40,15 @@ const SCHEMA: &str = "
     -- serve the real access paths (views: completed=0 + due_date range, project filter, projects()).
     CREATE INDEX IF NOT EXISTS idx_tasks_completed_due_date ON tasks(completed, due_date);
     CREATE INDEX IF NOT EXISTS idx_tasks_completed_project ON tasks(completed, project);
+    -- Serves `projects()`: SELECT DISTINCT project ... ORDER BY project COLLATE NOCASE.
+    -- Measured (EXPLAIN QUERY PLAN, 200-500k rows, 20-60 projects): SQLite picks this as a
+    -- COVERING index in every case, small or large, with or without ANALYZE stats -- so it is
+    -- used, not dead weight. Leading NOCASE column = the index order satisfies the ORDER BY
+    -- (the no-index plan needs an extra `TEMP B-TREE FOR ORDER BY`); trailing `project` column
+    -- keeps the scan covering so DISTINCT never touches table rows. The DISTINCT b-tree itself
+    -- remains either way (dedup over an ordered scan is unavoidable for SQLite). A single-column
+    -- (project COLLATE NOCASE) version measures the same within noise, so the second column is
+    -- kept only for its covering property; drop it if that ever stops holding.
     CREATE INDEX IF NOT EXISTS idx_tasks_project_nocase ON tasks(project COLLATE NOCASE, project);
     CREATE TABLE IF NOT EXISTS notes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -828,35 +837,95 @@ mod tests {
         );
     }
 
+    /// High-cardinality seed: `count` rows spread over `projects` distinct project names.
+    /// `projects()` is a `SELECT DISTINCT ... ORDER BY project COLLATE NOCASE`, which only
+    /// becomes an index decision once the table is big enough to matter, so measure it here
+    /// instead of on the six-row `seed_tasks` fixture.
+    fn seed_many_projects(repo: &TaskRepo, count: usize, projects: usize) {
+        for i in 0..count {
+            repo.create(&NewTask {
+                title: format!("bulk-{i}"),
+                description: String::new(),
+                project: format!("project-{:03}", i % projects),
+                priority: Priority::Medium,
+                due_date: Some(format!("2026-{:02}-{:02}", 1 + (i % 12), 1 + (i % 28))),
+                calendar_event_id: None,
+            })
+            .unwrap();
+        }
+    }
+
     #[test]
     fn project_nocase_index_exists_and_covers_distinct_projects() {
         let repo = TaskRepo::in_memory().unwrap();
         seed_tasks(&repo);
-        let conn = repo.lock().unwrap();
+        // 200 rows over 20 projects: enough cardinality for the planner's choice to be
+        // meaningful. (Measured: with 2 000 rows / 25 projects the plan is identical, so 200 is
+        // the cheaper fixture that still exercises the real decision.)
+        seed_many_projects(&repo, 200, 20);
 
-        // The planner picks which index to use heuristically and does not always choose this one
-        // on a small table, so assert existence (and its column shape) rather than the plan.
-        let sql: String = conn
-            .query_row(
-                "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_tasks_project_nocase'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert!(
-            sql.contains("project COLLATE NOCASE"),
-            "unexpected definition: {sql}"
-        );
-        assert!(
-            index_names(&conn)
-                .iter()
-                .any(|n| n == "idx_tasks_project_nocase"),
-            "index missing from sqlite_master"
-        );
+        // The index definition itself: leading `project COLLATE NOCASE` is what lets the query's
+        // `ORDER BY project COLLATE NOCASE` be satisfied by the index order. The trailing
+        // `project` column keeps the scan covering so the DISTINCT no longer touches the table.
+        {
+            let conn = repo.lock().unwrap();
+            let sql: String = conn
+                .query_row(
+                    "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_tasks_project_nocase'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(
+                sql.contains("project COLLATE NOCASE"),
+                "unexpected definition: {sql}"
+            );
+            assert!(
+                index_names(&conn)
+                    .iter()
+                    .any(|n| n == "idx_tasks_project_nocase"),
+                "index missing from sqlite_master"
+            );
 
-        // Regardless of the chosen plan, `projects()` still returns the right answer.
+            // The plan *is* asserted, not just the DDL: on this cardinality SQLite does pick the
+            // index, and it picks it as a COVERING index (i.e. without leaving the index for
+            // table rows). If that ever stops being true the index is dead weight and this test
+            // must fail so it can be dropped deliberately.
+            let mut stmt = conn
+                .prepare(
+                    "EXPLAIN QUERY PLAN SELECT DISTINCT project FROM tasks WHERE project <> '' \
+                     ORDER BY project COLLATE NOCASE ASC",
+                )
+                .unwrap();
+            let detail = stmt
+                .query_map([], |row| row.get::<_, String>(3))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+                .join("\n");
+            assert!(
+                detail.contains("idx_tasks_project_nocase"),
+                "projects() plan stopped using idx_tasks_project_nocase:\n{detail}"
+            );
+            assert!(
+                detail.contains("COVERING INDEX idx_tasks_project_nocase"),
+                "index is used but no longer covering the DISTINCT:\n{detail}"
+            );
+        }
+        // Guard dropped here — `projects()` takes the same non-reentrant mutex.
+
+        // And the query still returns the right, de-duplicated, case-insensitively sorted answer.
         let projects = repo.projects().unwrap();
-        assert_eq!(projects, ["beta", "gamma", "wms"]);
+        for expected in ["beta", "gamma", "wms"] {
+            assert!(
+                projects.iter().any(|p| p == expected),
+                "seed project {expected} missing from {projects:?}"
+            );
+        }
+        assert_eq!(projects.len(), 23, "expected 3 seed + 20 bulk projects");
+        let mut sorted = projects.clone();
+        sorted.sort_by_key(|p| p.to_lowercase());
+        assert_eq!(projects, sorted, "projects() must be case-insensitively sorted");
     }
 
     #[test]
