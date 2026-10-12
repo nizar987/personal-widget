@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 
 use taskwidget_server::config::Config;
-use taskwidget_server::repo::TaskRepo;
+use taskwidget_server::repo::{NoteRepo, TaskRepo};
 use taskwidget_server::{api, import};
 use tracing_subscriber::EnvFilter;
 
@@ -58,13 +58,21 @@ fn open_repo() -> Result<(Config, TaskRepo), String> {
     Ok((config, repo))
 }
 
+/// Both repos open the same SQLite file; WAL mode allows concurrent readers.
+fn open_repos() -> Result<(Config, TaskRepo, NoteRepo), String> {
+    let (config, tasks) = open_repo()?;
+    let notes = NoteRepo::open(&config.db_path)
+        .map_err(|e| format!("cannot open database {}: {e}", config.db_path.display()))?;
+    Ok((config, tasks, notes))
+}
+
 async fn serve() -> Result<(), String> {
-    let (config, repo) = open_repo()?;
+    let (config, tasks, notes) = open_repos()?;
     let listener = tokio::net::TcpListener::bind(config.addr)
         .await
         .map_err(|e| format!("cannot listen on {}: {e}", config.addr))?;
     tracing::info!(addr = %config.addr, db = %config.db_path.display(), "taskwidget-server listening");
-    axum::serve(listener, api::router(repo))
+    axum::serve(listener, api::router_with_notes(tasks, notes))
         .with_graceful_shutdown(shutdown_signal())
         .await
         .map_err(|e| format!("server error: {e}"))

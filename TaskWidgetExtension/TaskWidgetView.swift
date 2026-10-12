@@ -1,6 +1,13 @@
 import WidgetKit
 import SwiftUI
 
+/// Rows that fit on one page for each size.
+private enum RowsPerPage {
+    static let small = 3
+    static let medium = 3
+    static let large = 8
+}
+
 struct TaskWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: TaskProvider.Entry
@@ -11,100 +18,133 @@ struct TaskWidgetView: View {
                 OfflineTile()
             } else {
                 switch family {
-                case .systemSmall: SmallLayout(entry: entry)
-                case .systemMedium: MediumLayout(entry: entry)
-                default: LargeLayout(entry: entry)
+                case .systemSmall: SmallLayout(entry: entry, scope: family.stateScope)
+                case .systemMedium: MediumLayout(entry: entry, scope: family.stateScope)
+                default: LargeLayout(entry: entry, scope: family.stateScope)
                 }
             }
         }
         .padding(WidgetTheme.outerPadding)
+        // Only the ↗ button opens the app; other clicks land on a no-op control.
+        .modifier(SwallowClicks())
         .containerBackground(WidgetTheme.background, for: .widget)
     }
 }
 
-// MARK: - Small: Today (falls back to Up next when today is clear)
+// MARK: - Small: one list, tap the title to switch lists
 
-private struct SmallLayout: View {
+struct SmallLayout: View {
     let entry: TaskEntry
+    let scope: String
 
     var body: some View {
-        let g = entry.groups
-        let section = g.today.isEmpty ? TaskSection.upNext(g) : TaskSection.today(g)
-        SectionTile(section: section, now: entry.date, maxRows: 4,
-                    hidesTodayLabel: true, emptyText: "All clear 🎉")
+        let model = WidgetListModel(tasks: entry.tasks, tab: entry.state.tab, page: entry.state.page,
+                                    rowsPerPage: RowsPerPage.small, now: entry.date)
+        VStack(alignment: .leading, spacing: 7) {
+            ListHeader(tab: model.tab, count: model.total, scope: scope, cycles: true)
+            TaskListBody(model: model, now: entry.date, compact: true)
+            Spacer(minLength: 0)
+            HStack(spacing: 4) {
+                AddTaskButton()
+                OpenAppButton()
+                Spacer(minLength: 2)
+                Pager(page: model.page, pageCount: model.pageCount, scope: scope)
+            }
+        }
+        .tile()
     }
 }
 
-// MARK: - Medium: month calendar + Up next
+// MARK: - Medium: today's progress + tabbed list
 
-private struct MediumLayout: View {
+struct MediumLayout: View {
     let entry: TaskEntry
+    let scope: String
 
     var body: some View {
+        let model = WidgetListModel(tasks: entry.tasks, tab: entry.state.tab, page: entry.state.page,
+                                    rowsPerPage: RowsPerPage.medium, now: entry.date)
         HStack(spacing: WidgetTheme.tileSpacing) {
-            MiniMonth(tasks: entry.tasks, now: entry.date)
-                .frame(width: 128)
-            SectionTile(section: .upNext(entry.groups), now: entry.date, maxRows: 4,
-                        emptyText: "No dated tasks")
+            VStack(spacing: 6) {
+                VStack(spacing: 0) {
+                    Text(entry.date, format: .dateTime.weekday(.wide))
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(WidgetTheme.todayAccent)
+                    Text(entry.date, format: .dateTime.month(.abbreviated).day())
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                }
+                ProgressRing(progress: DayProgress(tasks: entry.tasks, now: entry.date), size: 56)
+                Spacer(minLength: 0)
+                HStack(spacing: 4) {
+                    OpenAppButton()
+                    AddTaskButton(label: "New")
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .tile(padding: 8)
+            .frame(width: 104)
+
+            VStack(alignment: .leading, spacing: 7) {
+                TabBar(selected: model.tab, tasks: entry.tasks, now: entry.date, scope: scope, compact: true)
+                TaskListBody(model: model, now: entry.date, showsSnooze: true)
+                Spacer(minLength: 0)
+                HStack {
+                    Spacer()
+                    Pager(page: model.page, pageCount: model.pageCount, scope: scope)
+                }
+            }
+            .tile()
         }
     }
 }
 
-// MARK: - Large: header, week strip, 2×2 sections
+// MARK: - Large: header, tappable week, tabbed list
 
-private struct LargeLayout: View {
+struct LargeLayout: View {
     let entry: TaskEntry
+    let scope: String
 
     var body: some View {
-        let g = entry.groups
+        let model = WidgetListModel(tasks: entry.tasks, tab: entry.state.tab, page: entry.state.page,
+                                    rowsPerPage: RowsPerPage.large, now: entry.date)
+        let progress = DayProgress(tasks: entry.tasks, now: entry.date)
         VStack(spacing: WidgetTheme.tileSpacing) {
-            DateHeader(now: entry.date)
-            WeekStrip(tasks: entry.tasks, now: entry.date)
-                .frame(height: 74)
-            Grid(horizontalSpacing: WidgetTheme.tileSpacing, verticalSpacing: WidgetTheme.tileSpacing) {
-                GridRow {
-                    SectionTile(section: .today(g), now: entry.date, maxRows: 3, hidesTodayLabel: true)
-                    SectionTile(section: .important(g), now: entry.date, maxRows: 3)
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(entry.date, format: .dateTime.weekday(.wide))
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(WidgetTheme.todayAccent)
+                    Text(entry.date, format: .dateTime.month(.wide).day())
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
                 }
-                GridRow {
-                    SectionTile(section: .upcoming(g), now: entry.date, maxRows: 3)
-                    SectionTile(section: .someday(g), now: entry.date, maxRows: 3, showsDue: false)
+                Spacer()
+                ProgressRing(progress: progress, size: 34)
+                OpenAppButton()
+                AddTaskButton(label: "New")
+            }
+            .padding(.horizontal, 4)
+
+            WeekStrip(tasks: entry.tasks, now: entry.date, selected: model.tab, scope: scope)
+                .frame(height: 62)
+
+            VStack(alignment: .leading, spacing: 8) {
+                TabBar(selected: model.tab, tasks: entry.tasks, now: entry.date, scope: scope)
+                TaskListBody(model: model, now: entry.date, showsSnooze: true)
+                Spacer(minLength: 0)
+                HStack {
+                    Text(footer(model))
+                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                    Pager(page: model.page, pageCount: model.pageCount, scope: scope)
                 }
             }
+            .tile()
         }
     }
-}
 
-/// "Saturday, October 10" plus a thin year-progress bar, like LockDay's year widget.
-private struct DateHeader: View {
-    let now: Date
-
-    private var yearProgress: Double {
-        let cal = Calendar.current
-        guard let year = cal.dateInterval(of: .year, for: now) else { return 0 }
-        return now.timeIntervalSince(year.start) / year.duration
-    }
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(now, format: .dateTime.weekday(.wide).month(.wide).day())
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-            Spacer()
-            HStack(spacing: 6) {
-                Text(now, format: .dateTime.year())
-                Capsule()
-                    .fill(Color.primary.opacity(0.15))
-                    .overlay(alignment: .leading) {
-                        Capsule().fill(Color.primary.opacity(0.75)).frame(width: 54 * yearProgress)
-                    }
-                    .frame(width: 54, height: 4)
-                Text(yearProgress, format: .percent.precision(.fractionLength(0)))
-                    .monospacedDigit()
-            }
-            .font(.system(size: 10, weight: .semibold, design: .rounded))
-            .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 4)
+    private func footer(_ model: WidgetListModel) -> String {
+        model.total == 0 ? "" : "\(model.total) open in \(model.tab.title)"
     }
 }
 
@@ -119,7 +159,7 @@ struct TaskWidgetExtensionWidget: Widget {
             TaskWidgetView(entry: entry)
         }
         .configurationDisplayName("Tasks")
-        .description("Today, upcoming and someday tasks at a glance.")
+        .description("Check off, snooze and browse your tasks right from the desktop.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
     }

@@ -8,7 +8,8 @@ struct TaskWidgetApp: App {
 
     var body: some Scene {
         Window("TaskWidget", id: WindowID.main) {
-            ContentView(store: appDelegate.store, noteStore: appDelegate.noteStore, router: appDelegate.router)
+            ContentView(store: appDelegate.store, noteStore: appDelegate.noteStore, router: appDelegate.router,
+                        onQuickCapture: appDelegate.quickCaptureOpener)
                 .frame(minWidth: 640, minHeight: 460)
                 .onAppear { DockPresence.mainWindowDidOpen() }
                 .onDisappear { DockPresence.mainWindowDidClose() }

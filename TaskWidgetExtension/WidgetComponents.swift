@@ -1,12 +1,14 @@
 import SwiftUI
 import WidgetKit
 
-// MARK: - Tile container
+// MARK: - Surfaces
 
 struct TileBackground: ViewModifier {
+    var padding: CGFloat = 10
+
     func body(content: Content) -> some View {
         content
-            .padding(10)
+            .padding(padding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: WidgetTheme.tileRadius, style: .continuous)
@@ -16,10 +18,8 @@ struct TileBackground: ViewModifier {
 }
 
 extension View {
-    func tile() -> some View { modifier(TileBackground()) }
+    func tile(padding: CGFloat = 10) -> some View { modifier(TileBackground(padding: padding)) }
 }
-
-// MARK: - Header + badge
 
 struct CountBadge: View {
     let count: Int
@@ -33,27 +33,8 @@ struct CountBadge: View {
             .contentTransition(.numericText(value: Double(count)))
             .padding(.horizontal, 5)
             .frame(minWidth: 17, minHeight: 17)
-            .background(Capsule().fill(accent == .primary ? Color.gray : accent))
+            .background(Capsule().fill(accent == .gray ? Color.gray : accent))
             .widgetAccentable()
-    }
-}
-
-struct SectionHeader: View {
-    let section: TaskSection
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: section.icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(section.accent)
-                .widgetAccentable()
-            Text(section.title)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(section.accent == .secondary ? Color.primary : section.accent)
-                .lineLimit(1)
-            Spacer(minLength: 4)
-            CountBadge(count: section.tasks.count, accent: section.accent)
-        }
     }
 }
 
@@ -64,33 +45,58 @@ struct TaskRow: View {
     let now: Date
     var showsDue = true
     var hidesTodayLabel = false
+    var showsSnooze = false
+    /// Small widget: no room for "Overdue" / "Tmrw", so only overdue gets a tiny marker.
+    var compact = false
 
     private var dueLabel: String? {
         guard showsDue, let label = DueLabel.text(for: task, now: now) else { return nil }
         return hidesTodayLabel && label == "Today" ? nil : label
     }
 
+    /// Snoozing makes sense for open tasks that are due now (today or overdue).
+    private var canSnooze: Bool { showsSnooze && !task.completed && task.isDueByToday(now) }
+
     var body: some View {
-        // Toggle(isOn:intent:) flips to "checked" instantly, before the intent finishes.
-        Toggle(isOn: task.completed, intent: ToggleTaskIntent(taskId: task.id)) {
-            HStack(spacing: 6) {
-                Text(task.title)
-                    .font(.system(size: 11.5, weight: .regular, design: .rounded))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                Spacer(minLength: 2)
-
-                if let label = dueLabel {
-                    Text(label)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundStyle(DueLabel.color(for: task, now: now))
+        HStack(spacing: 4) {
+            // Toggle(isOn:intent:) flips to "checked" instantly, before the intent finishes.
+            Toggle(isOn: task.completed, intent: ToggleTaskIntent(taskId: task.id)) {
+                HStack(spacing: 6) {
+                    Text(task.title)
+                        .font(.system(size: 11.5, weight: .regular, design: .rounded))
                         .lineLimit(1)
-                        .fixedSize()
+                        .truncationMode(.tail)
+                    Spacer(minLength: 2)
+                    if compact {
+                        if task.isOverdue(now) && !task.completed {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(WidgetTheme.todayAccent)
+                        }
+                    } else if let label = dueLabel, !task.completed {
+                        Text(label)
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(DueLabel.color(for: task, now: now))
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
                 }
             }
+            .toggleStyle(CheckCircleToggleStyle(tint: WidgetTheme.color(for: task.priority)))
+
+            if canSnooze {
+                Button(intent: SnoozeTaskIntent(taskId: task.id)) {
+                    Image(systemName: "arrow.turn.up.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 16)
+                        .background(Capsule().fill(Color.primary.opacity(0.08)))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("Move to tomorrow")
+            }
         }
-        .toggleStyle(CheckCircleToggleStyle(tint: WidgetTheme.color(for: task.priority)))
     }
 }
 
@@ -102,7 +108,7 @@ struct CheckCircleToggleStyle: ToggleStyle {
         HStack(spacing: 6) {
             Image(systemName: configuration.isOn ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(tint)
+                .foregroundStyle(configuration.isOn ? Palette.done : tint)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 13, height: 13)
             configuration.label
@@ -124,189 +130,302 @@ extension AnyTransition {
     }
 }
 
-// MARK: - Section tile (header + rows + "+N more")
+// MARK: - Task list (rows + empty state)
 
-struct SectionTile: View {
-    let section: TaskSection
+struct TaskListBody: View {
+    let model: WidgetListModel
     let now: Date
-    let maxRows: Int
-    var showsDue = true
-    var hidesTodayLabel = false
-    var emptyText = "Nothing here"
+    var showsSnooze = false
+    var compact = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionHeader(section: section)
-            if section.tasks.isEmpty {
-                Text(emptyText)
-                    .font(.system(size: 11, design: .rounded))
-                    .foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 5) {
+            if model.rows.isEmpty {
+                EmptyListLine(tab: model.tab)
             } else {
-                ForEach(section.tasks.prefix(maxRows), id: \.id) { task in
-                    TaskRow(task: task, now: now, showsDue: showsDue, hidesTodayLabel: hidesTodayLabel)
+                ForEach(model.rows, id: \.id) { task in
+                    TaskRow(task: task, now: now, showsDue: !model.tab.isDay,
+                            hidesTodayLabel: model.tab == .today, showsSnooze: showsSnooze, compact: compact)
                         .transition(.taskRow)
                 }
-                if section.tasks.count > maxRows {
-                    Text("+\(section.tasks.count - maxRows) more")
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(.secondary)
-                        .contentTransition(.numericText(value: Double(section.tasks.count)))
-                        .padding(.leading, 19)
-                }
             }
-            Spacer(minLength: 0)
         }
-        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: section.tasks.map(\.id))
-        .tile()
+        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: model.rows.map(\.id))
     }
 }
 
-// MARK: - Week strip
+private struct EmptyListLine: View {
+    let tab: WidgetTab
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: tab == .today ? "checkmark.seal.fill" : "sparkles")
+                .foregroundStyle(tab == .today ? Palette.done : .secondary)
+            Text(tab == .today ? "All clear today" : "Nothing here")
+                .foregroundStyle(.secondary)
+        }
+        .font(.system(size: 11, weight: .medium, design: .rounded))
+        .padding(.top, 2)
+    }
+}
+
+// MARK: - Header, tabs, pager
+
+/// Tab title with count. When `cycles`, tapping it switches to the next tab (small widget).
+struct ListHeader: View {
+    let tab: WidgetTab
+    let count: Int
+    let scope: String
+    var cycles = false
+
+    var body: some View {
+        if cycles {
+            Button(intent: SelectWidgetTabIntent(scope: scope, tab: tab.next)) { label(showsChevron: true) }
+                .buttonStyle(.plain)
+        } else {
+            label(showsChevron: false)
+        }
+    }
+
+    private func label(showsChevron: Bool) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: tab.icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(tab.accent)
+                .widgetAccentable()
+            Text(tab.title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(tab.accent == .gray ? Color.primary : tab.accent)
+                .lineLimit(1)
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.tertiary)
+            }
+            CountBadge(count: count, accent: tab.accent)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+/// Pill buttons that switch the visible list.
+struct TabBar: View {
+    let selected: WidgetTab
+    let tasks: [Task]
+    let now: Date
+    let scope: String
+    var compact = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(WidgetTab.fixed, id: \.rawValue) { tab in
+                pill(tab)
+            }
+            if case .day = selected {
+                pill(selected)
+            }
+        }
+    }
+
+    private var useShortTitles: Bool {
+        if compact { return true }
+        if case .day = selected { return true }
+        return false
+    }
+
+    private func pill(_ tab: WidgetTab) -> some View {
+        let isOn = tab == selected
+        let compact = useShortTitles
+        let count = WidgetListModel.count(for: tab, in: tasks, now: now)
+        return Button(intent: SelectWidgetTabIntent(scope: scope, tab: tab)) {
+            HStack(spacing: 3) {
+                if !compact || isOn {
+                    Image(systemName: tab.icon).font(.system(size: 8.5, weight: .bold))
+                }
+                Text(compact ? tab.shortTitle : tab.title)
+                if count > 0 {
+                    Text("\(count)").monospacedDigit().opacity(0.75)
+                }
+            }
+            .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+            .lineLimit(1)
+            .foregroundStyle(isOn ? tab.accent : Color.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(isOn ? tab.accent.opacity(0.18) : Color.primary.opacity(0.05)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .widgetAccentable(isOn)
+    }
+}
+
+/// ‹ 1/3 › — wraps around at both ends.
+struct Pager: View {
+    let page: Int
+    let pageCount: Int
+    let scope: String
+
+    var body: some View {
+        if pageCount > 1 {
+            HStack(spacing: 6) {
+                arrow("chevron.left", to: (page - 1 + pageCount) % pageCount)
+                Text("\(page + 1)/\(pageCount)")
+                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                arrow("chevron.right", to: (page + 1) % pageCount)
+            }
+        }
+    }
+
+    private func arrow(_ icon: String, to target: Int) -> some View {
+        Button(intent: ChangeWidgetPageIntent(scope: scope, page: target)) {
+            Image(systemName: icon)
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 18, height: 15)
+                .background(Capsule().fill(Color.primary.opacity(0.08)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// The only way to open the main window from the widget (clicks elsewhere are swallowed).
+struct OpenAppButton: View {
+    var body: some View {
+        Link(destination: AppLink.open.url) {
+            Image(systemName: "arrow.up.forward.app")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(Color.primary.opacity(0.08)))
+        }
+        .help("Open TaskWidget")
+    }
+}
+
+/// Fills the widget's empty space with a no-op control so clicks there don't open the app.
+struct SwallowClicks: ViewModifier {
+    func body(content: Content) -> some View {
+        content.background(
+            Button(intent: WidgetNoOpIntent()) {
+                Color.clear.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        )
+    }
+}
+
+/// Opens quick capture in the app.
+struct AddTaskButton: View {
+    var label: String?
+
+    var body: some View {
+        Link(destination: AppLink.quickCapture.url) {
+            HStack(spacing: 3) {
+                Image(systemName: "plus").font(.system(size: 10, weight: .bold))
+                if let label {
+                    Text(label).font(.system(size: 10, weight: .semibold, design: .rounded))
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, label == nil ? 0 : 7)
+            .frame(minWidth: 20, minHeight: 20)
+            .background(Capsule().fill(Color.accentColor))
+            .widgetAccentable()
+        }
+    }
+}
+
+/// Ring with "done/total" for today.
+struct ProgressRing: View {
+    let progress: DayProgress
+    var size: CGFloat = 58
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(Color.primary.opacity(0.1), lineWidth: 5)
+            Circle()
+                .trim(from: 0, to: progress.fraction)
+                .stroke(Palette.done, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .widgetAccentable()
+            VStack(spacing: -1) {
+                Text("\(progress.done)/\(progress.total)")
+                    .font(.system(size: size * 0.24, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(progress.done)))
+                Text("done")
+                    .font(.system(size: size * 0.15, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: size, height: size)
+        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: progress.done)
+    }
+}
+
+// MARK: - Next 7 days (large widget; days are tappable)
 
 struct WeekStrip: View {
     let tasks: [Task]
     let now: Date
+    let selected: WidgetTab
+    let scope: String
 
+    /// Rolling window starting today, so every day shown can still be planned.
     private var days: [Date] {
-        let cal = Calendar.current
-        guard let week = cal.dateInterval(of: .weekOfYear, for: now) else { return [] }
-        return (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: week.start) }
+        (0..<7).map { TaskDate.day(offset: $0, from: now) }
     }
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 3) {
             ForEach(days, id: \.self) { day in
-                DayColumn(day: day, tasks: tasks(on: day), isToday: Calendar.current.isDate(day, inSameDayAs: now))
+                dayButton(day)
             }
         }
-        .tile()
+        .tile(padding: 6)
     }
 
-    private func tasks(on day: Date) -> [Task] {
-        tasks.filter { t in t.dueDay.map { Calendar.current.isDate($0, inSameDayAs: day) } ?? false }
-            .sorted { $0.priority.rank > $1.priority.rank }
-    }
-}
+    private func dayButton(_ day: Date) -> some View {
+        let cal = Calendar.current
+        let isToday = cal.isDate(day, inSameDayAs: now)
+        let isSelected: Bool = {
+            if case .day(let d) = selected { return d == day }
+            return isToday && selected == .today
+        }()
+        let dayTasks = tasks.filter { !$0.completed && $0.dueDay == day }
+        // Today maps to the Today list, which also includes overdue tasks.
+        let target: WidgetTab = isToday ? .today : .day(day)
 
-private struct DayColumn: View {
-    let day: Date
-    let tasks: [Task]
-    let isToday: Bool
-
-    private static let weekday: DateFormatter = {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("EEEEE")
-        return f
-    }()
-
-    var body: some View {
-        VStack(spacing: 3) {
-            Text(Self.weekday.string(from: day))
-                .font(.system(size: 9, weight: .medium, design: .rounded))
-                .foregroundStyle(.secondary)
-            Text("\(Calendar.current.component(.day, from: day))")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(isToday ? WidgetTheme.background : .primary)
-                .frame(width: 22, height: 22)
-                .background(Circle().fill(isToday ? Color.primary : .clear))
-            VStack(spacing: 2) {
-                ForEach(tasks.prefix(2), id: \.id) { t in
-                    Text(t.title)
-                        .font(.system(size: 7.5, weight: .medium, design: .rounded))
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(WidgetTheme.color(for: t.priority).opacity(0.35))
-                        )
-                }
-                if tasks.count > 2 {
-                    Text("+\(tasks.count - 2)")
-                        .font(.system(size: 7.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-// MARK: - Mini month calendar
-
-struct MiniMonth: View {
-    let tasks: [Task]
-    let now: Date
-
-    private var cal: Calendar { Calendar.current }
-
-    private var monthTitle: String {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("MMM")
-        return f.string(from: now)
-    }
-
-    /// Leading nils pad the first week so day 1 lands on its weekday column.
-    private var cells: [Date?] {
-        guard let month = cal.dateInterval(of: .month, for: now),
-              let count = cal.range(of: .day, in: .month, for: now)?.count else { return [] }
-        let lead = (cal.component(.weekday, from: month.start) - cal.firstWeekday + 7) % 7
-        let days = (0..<count).compactMap { cal.date(byAdding: .day, value: $0, to: month.start) }
-        return Array(repeating: nil, count: lead) + days.map { Optional($0) }
-    }
-
-    private var symbols: [String] {
-        let s = cal.veryShortWeekdaySymbols
-        let i = cal.firstWeekday - 1
-        return Array(s[i...] + s[..<i])
-    }
-
-    private var busyDays: Set<Int> {
-        Set(tasks.compactMap { t in
-            guard let d = t.dueDay, cal.isDate(d, equalTo: now, toGranularity: .month) else { return nil }
-            return cal.component(.day, from: d)
-        })
-    }
-
-    var body: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
-        VStack(alignment: .leading, spacing: 4) {
-            Text(monthTitle)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(WidgetTheme.todayAccent)
-            LazyVGrid(columns: columns, spacing: 2) {
-                ForEach(Array(symbols.enumerated()), id: \.offset) { _, s in
-                    Text(s).font(.system(size: 8, weight: .semibold, design: .rounded)).foregroundStyle(.tertiary)
-                }
-                ForEach(Array(cells.enumerated()), id: \.offset) { _, day in
-                    dayCell(day)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .tile()
-    }
-
-    @ViewBuilder
-    private func dayCell(_ day: Date?) -> some View {
-        if let day {
-            let n = cal.component(.day, from: day)
-            let isToday = cal.isDate(day, inSameDayAs: now)
-            Text("\(n)")
-                .font(.system(size: 8.5, weight: isToday ? .bold : .medium, design: .rounded))
-                .foregroundStyle(isToday ? WidgetTheme.background : (busyDays.contains(n) ? .primary : .secondary))
-                .frame(width: 14, height: 14)
-                .background(Circle().fill(isToday ? Color.primary : .clear))
-                .overlay(alignment: .bottom) {
-                    if busyDays.contains(n) && !isToday {
-                        Circle().fill(WidgetTheme.todayAccent).frame(width: 2.5, height: 2.5).offset(y: 2)
+        return Button(intent: SelectWidgetTabIntent(scope: scope, tab: target)) {
+            VStack(spacing: 3) {
+                Text(day, format: .dateTime.weekday(.narrow))
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                Text("\(cal.component(.day, from: day))")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(isToday ? WidgetTheme.background : .primary)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(isToday ? Color.primary : .clear))
+                HStack(spacing: 2) {
+                    ForEach(dayTasks.prefix(3), id: \.id) { task in
+                        Circle().fill(WidgetTheme.color(for: task.priority)).frame(width: 4, height: 4)
                     }
                 }
-        } else {
-            Color.clear.frame(width: 14, height: 14)
+                .frame(height: 4)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.18) : .clear)
+            )
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 }
 

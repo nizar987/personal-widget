@@ -29,6 +29,9 @@ final class QuickCaptureSession {
     private(set) var openCounts: [String: Int] = [:]
     /// Bumped on every show so the view re-focuses the field.
     private(set) var presentation = 0
+    /// Mode requested for the current presentation (e.g. ⌘N from Notes → note). Cleared
+    /// as soon as the user interacts, so manual switching keeps working afterwards.
+    var requestedMode: QuickCaptureMode?
 
     /// Highlighted suggestion row.
     var selectedIndex = 0
@@ -50,7 +53,8 @@ final class QuickCaptureSession {
         return QuickCaptureSuggester.suggestions(for: text, projects: projects, openCounts: openCounts, history: history)
     }
 
-    func prepare(tasks: [Task], projects: [String]) {
+    func prepare(tasks: [Task], projects: [String], mode: QuickCaptureMode? = nil) {
+        requestedMode = mode
         text = ""
         errorMessage = nil
         update(tasks: tasks, projects: projects)
@@ -69,6 +73,15 @@ final class QuickCaptureSession {
 
     func accept(_ suggestion: QuickCaptureSuggestion) {
         text = suggestion.completion
+    }
+
+    /// User tapped a mode in the picker — their choice wins from now on.
+    func chooseMode(_ newMode: QuickCaptureMode) {
+        mode = newMode
+        requestedMode = nil
+        if newMode == .task, text.hasPrefix("//") {
+            text = String(text.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+        }
     }
 
     // MARK: - Keyboard

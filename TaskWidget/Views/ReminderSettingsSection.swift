@@ -6,6 +6,7 @@ struct ReminderSettingsSection: View {
     @State private var settings = DailyReminderSettings.load()
     @State private var authorization: UNAuthorizationStatus = .notDetermined
     @State private var sentTest = false
+    @State private var testProblem: String?
 
     private var time: Binding<Date> {
         Binding(
@@ -34,12 +35,18 @@ struct ReminderSettingsSection: View {
                 HStack {
                     Button(sentTest ? "Sent ✓" : "Send test notification") {
                         _Concurrency.Task {
-                            await DailyReminderScheduler.shared.sendTest()
-                            sentTest = true
+                            testProblem = await DailyReminderScheduler.shared.sendTest()
+                            authorization = DailyReminderScheduler.shared.authorization
+                            sentTest = testProblem == nil
                         }
                     }
                     .disabled(authorization == .denied)
                     Spacer()
+                }
+                if let testProblem {
+                    Label(testProblem, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(Palette.today)
                 }
             }
             if authorization == .denied {

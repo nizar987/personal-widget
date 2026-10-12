@@ -34,9 +34,13 @@ const SCHEMA: &str = "
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
         completed_at TEXT DEFAULT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
-    CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project);
-    CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(completed);
+    -- Replaces the old idx_tasks_completed / idx_tasks_due_date / idx_tasks_project trio:
+    -- `completed` alone has only 2 distinct values, so a single-column index on it made the
+    -- planner scan ~half the table; `due_date` alone was never picked. Composite indexes below
+    -- serve the real access paths (views: completed=0 + due_date range, project filter, projects()).
+    CREATE INDEX IF NOT EXISTS idx_tasks_completed_due_date ON tasks(completed, due_date);
+    CREATE INDEX IF NOT EXISTS idx_tasks_completed_project ON tasks(completed, project);
+    CREATE INDEX IF NOT EXISTS idx_tasks_project_nocase ON tasks(project COLLATE NOCASE, project);
     CREATE TABLE IF NOT EXISTS notes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         content TEXT NOT NULL,
@@ -278,6 +282,21 @@ fn migrate(conn: &Connection) -> RepoResult<()> {
              UPDATE tasks SET completed_at = updated_at WHERE completed = 1;",
         )?;
         tracing::info!("migrated tasks table: added completed_at");
+    }
+
+    drop_superseded_indexes(conn)?;
+    Ok(())
+}
+
+/// Indexes that the composite replacements in `SCHEMA` made useless. Databases created before
+/// that change still carry them, so drop them here. `SCHEMA` runs first, so the new indexes
+/// already exist by the time we get here — this only removes dead weight, never data or tables.
+const SUPERSEDED_INDEXES: &[&str] = &["idx_tasks_completed", "idx_tasks_due_date"];
+
+fn drop_superseded_indexes(conn: &Connection) -> RepoResult<()> {
+    for name in SUPERSEDED_INDEXES {
+        conn.execute_batch(&format!("DROP INDEX IF EXISTS {name};"))?;
+        tracing::info!("migrated tasks indexes: dropped {name} (superseded)");
     }
     Ok(())
 }
@@ -647,5 +666,218 @@ mod tests {
         };
         assert_eq!(by_title("done").as_deref(), Some("2026-10-01 10:00:00"));
         assert_eq!(by_title("open"), None);
+    }
+
+    // MARK: - Indexing plan (read-only verification)
+
+    /// Index names that `SCHEMA` must create, and the ones it must no longer create.
+    const EXPECTED_INDEXES: &[&str] = &[
+        "idx_tasks_completed_due_date",
+        "idx_tasks_completed_project",
+        "idx_tasks_project_nocase",
+        "idx_notes_updated_at",
+    ];
+    const REMOVED_INDEXES: &[&str] = &["idx_tasks_completed", "idx_tasks_due_date", "idx_tasks_project"];
+
+    fn index_names(conn: &Connection) -> Vec<String> {
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'index' ORDER BY name")
+            .unwrap();
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0)).unwrap();
+        rows.collect::<Result<Vec<_>, _>>().unwrap()
+    }
+
+    /// `EXPLAIN QUERY PLAN` detail lines, newline-joined for easy `contains` assertions.
+    fn query_plan(conn: &Connection, sql: &str, params: &[SqlValue]) -> String {
+        let mut stmt = conn.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
+        let rows = stmt
+            .query_map(params_from_iter(params.iter().cloned()), |row| {
+                row.get::<_, String>(3)
+            })
+            .unwrap();
+        rows.collect::<Result<Vec<_>, _>>().unwrap().join("\n")
+    }
+
+    /// A handful of rows at each `completed`/due-date/project combination, so the planner has
+    /// real cardinality to work with instead of an empty table.
+    fn seed_tasks(repo: &TaskRepo) {
+        let one = |title: &str, project: &str, due: Option<&str>| NewTask {
+            title: title.into(),
+            description: String::new(),
+            project: project.into(),
+            priority: Priority::Medium,
+            due_date: due.map(Into::into),
+            calendar_event_id: None,
+        };
+        // 3 open + 3 done, spread over 3 projects and several due dates.
+        for (title, project, due) in [
+            ("open-soon", "wms", Some("2026-10-05")),
+            ("open-mid", "wms", Some("2026-10-15")),
+            ("open-undated", "beta", None),
+            ("done-soon", "wms", Some("2026-10-06")),
+            ("done-mid", "beta", Some("2026-10-16")),
+            ("done-old", "gamma", Some("2026-09-01")),
+        ] {
+            let task = repo.create(&one(title, project, due)).unwrap();
+            if title.starts_with("done") {
+                repo.toggle(task.id).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn schema_creates_new_indexes_and_drops_superseded_ones() {
+        let repo = TaskRepo::in_memory().unwrap();
+        let conn = repo.lock().unwrap();
+        let names = index_names(&conn);
+        for expected in EXPECTED_INDEXES {
+            assert!(
+                names.iter().any(|n| n == expected),
+                "missing index {expected}; found {names:?}"
+            );
+        }
+        for removed in REMOVED_INDEXES {
+            assert!(
+                !names.iter().any(|n| n == removed),
+                "superseded index {removed} still present; found {names:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn migration_drops_legacy_indexes_from_an_existing_database() {
+        // Simulate a pre-existing DB that still carries the old three single-column indexes.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+             CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project);
+             CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(completed);",
+        )
+        .unwrap();
+        assert!(index_names(&conn).iter().any(|n| n == "idx_tasks_completed"));
+
+        // `migrate` is what an existing DB runs on startup; it must clear the legacy indexes
+        // without touching data or the tables.
+        migrate(&conn).unwrap();
+        let names = index_names(&conn);
+        assert!(!names.iter().any(|n| n == "idx_tasks_completed"));
+        assert!(!names.iter().any(|n| n == "idx_tasks_due_date"));
+        for expected in EXPECTED_INDEXES {
+            assert!(names.iter().any(|n| n == expected), "missing {expected}");
+        }
+        let tables: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' \
+                 AND name IN ('tasks', 'notes')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(tables, 2, "tasks/notes tables must survive the migration");
+    }
+
+    #[test]
+    fn views_query_uses_completed_due_date_index() {
+        let repo = TaskRepo::in_memory().unwrap();
+        seed_tasks(&repo);
+        let conn = repo.lock().unwrap();
+        // Same shape as the today/week views: completed = 0 + a due_date range.
+        let plan = query_plan(
+            &conn,
+            "SELECT id, title, due_date FROM tasks \
+             WHERE completed = 0 AND due_date >= ? AND due_date <= ? \
+             ORDER BY due_date IS NULL, due_date ASC, id DESC",
+            &[
+                "2026-10-01".to_owned().into(),
+                "2026-10-31".to_owned().into(),
+            ],
+        );
+        assert!(
+            plan.contains("idx_tasks_completed_due_date"),
+            "views plan does not use the composite index:\n{plan}"
+        );
+        assert!(
+            plan.contains("SEARCH tasks"),
+            "expected an index SEARCH, got:\n{plan}"
+        );
+        assert!(
+            !plan.contains("SCAN tasks"),
+            "planner fell back to a table scan:\n{plan}"
+        );
+    }
+
+    #[test]
+    fn project_filter_uses_completed_project_index() {
+        let repo = TaskRepo::in_memory().unwrap();
+        seed_tasks(&repo);
+        let conn = repo.lock().unwrap();
+        let plan = query_plan(
+            &conn,
+            "SELECT id, title FROM tasks WHERE completed = 0 AND project = ? \
+             ORDER BY due_date IS NULL, due_date ASC, id DESC",
+            &["wms".to_owned().into()],
+        );
+        assert!(
+            plan.contains("idx_tasks_completed_project"),
+            "project-filter plan does not use the composite index:\n{plan}"
+        );
+        assert!(
+            !plan.contains("SCAN tasks"),
+            "planner fell back to a table scan:\n{plan}"
+        );
+    }
+
+    #[test]
+    fn project_nocase_index_exists_and_covers_distinct_projects() {
+        let repo = TaskRepo::in_memory().unwrap();
+        seed_tasks(&repo);
+        let conn = repo.lock().unwrap();
+
+        // The planner picks which index to use heuristically and does not always choose this one
+        // on a small table, so assert existence (and its column shape) rather than the plan.
+        let sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_tasks_project_nocase'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            sql.contains("project COLLATE NOCASE"),
+            "unexpected definition: {sql}"
+        );
+        assert!(
+            index_names(&conn)
+                .iter()
+                .any(|n| n == "idx_tasks_project_nocase"),
+            "index missing from sqlite_master"
+        );
+
+        // Regardless of the chosen plan, `projects()` still returns the right answer.
+        let projects = repo.projects().unwrap();
+        assert_eq!(projects, ["beta", "gamma", "wms"]);
+    }
+
+    #[test]
+    fn notes_query_keeps_using_notes_updated_at_index() {
+        let repo = NoteRepo::in_memory().unwrap();
+        for content in ["alpha", "beta", "gamma"] {
+            repo.create(&NewNote {
+                content: content.into(),
+            })
+            .unwrap();
+        }
+        let conn = repo.lock().unwrap();
+        let plan = query_plan(
+            &conn,
+            "SELECT id, content, created_at, updated_at FROM notes \
+             ORDER BY updated_at DESC, id DESC LIMIT 50",
+            &[],
+        );
+        assert!(
+            plan.contains("idx_notes_updated_at"),
+            "notes plan lost its covering index:\n{plan}"
+        );
     }
 }

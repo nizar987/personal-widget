@@ -20,27 +20,3 @@ enum WidgetTheme {
 
     static func color(for priority: Priority) -> Color { Palette.color(for: priority) }
 }
-
-/// One LockDay section: icon, title, accent, tasks.
-struct TaskSection {
-    let title: String
-    let icon: String
-    let accent: Color
-    let tasks: [Task]
-
-    static func today(_ g: TaskGroups) -> TaskSection {
-        TaskSection(title: "Today", icon: "flame.fill", accent: WidgetTheme.todayAccent, tasks: g.today)
-    }
-    static func important(_ g: TaskGroups) -> TaskSection {
-        TaskSection(title: "Important", icon: "star.fill", accent: WidgetTheme.importantAccent, tasks: g.important)
-    }
-    static func upcoming(_ g: TaskGroups) -> TaskSection {
-        TaskSection(title: "Upcoming", icon: "bolt.fill", accent: WidgetTheme.upcomingAccent, tasks: g.upcoming)
-    }
-    static func someday(_ g: TaskGroups) -> TaskSection {
-        TaskSection(title: "Someday", icon: "tray.fill", accent: WidgetTheme.somedayAccent, tasks: g.someday)
-    }
-    static func upNext(_ g: TaskGroups) -> TaskSection {
-        TaskSection(title: "Up next", icon: "checklist", accent: .primary, tasks: g.upNext)
-    }
-}

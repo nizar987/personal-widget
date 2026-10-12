@@ -18,24 +18,27 @@ struct TaskProvider: TimelineProvider {
             completion(.sample)
             return
         }
-        _Concurrency.Task { completion(await Self.loadEntry()) }
+        _Concurrency.Task { completion(await Self.loadEntry(family: context.family)) }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TaskEntry>) -> Void) {
         _Concurrency.Task {
-            let entry = await Self.loadEntry()
+            let entry = await Self.loadEntry(family: context.family)
             let minutes = entry.errorMessage == nil ? Self.refreshMinutes : Self.retryMinutes
             let next = Calendar.current.date(byAdding: .minute, value: minutes, to: Date()) ?? Date()
             completion(Timeline(entries: [entry], policy: .after(next)))
         }
     }
 
-    private static func loadEntry() async -> TaskEntry {
+    /// All tasks (not just open ones) so today's completions stay visible and can be undone.
+    private static func loadEntry(family: WidgetFamily) async -> TaskEntry {
+        let now = Date()
+        let state = WidgetUIState.load(scope: family.stateScope).normalized(now: now)
         do {
-            let tasks = try await APIClient.shared.fetchTasks(completed: false)
-            return TaskEntry(date: Date(), tasks: tasks, errorMessage: nil)
+            let tasks = try await APIClient.shared.fetchTasks()
+            return TaskEntry(date: now, tasks: tasks, errorMessage: nil, state: state)
         } catch {
-            return TaskEntry(date: Date(), tasks: [], errorMessage: error.localizedDescription)
+            return TaskEntry(date: now, tasks: [], errorMessage: error.localizedDescription, state: state)
         }
     }
 }
@@ -44,8 +47,8 @@ struct TaskEntry: TimelineEntry {
     let date: Date
     let tasks: [Task]
     let errorMessage: String?
+    var state = WidgetUIState()
 
-    var groups: TaskGroups { TaskGroups(tasks: tasks, today: date) }
 }
 
 // MARK: - Sample data (placeholder, gallery, previews)
@@ -67,6 +70,12 @@ extension TaskEntry {
             task(7, "Read 10 pages", .low, day(3)),
             task(8, "Plan a weekend outing", .low, nil),
             task(9, "Watch YouTube", .low, nil),
+            {
+                var done = task(10, "Morning standup", .medium, day(0))
+                done.completed = true
+                done.completedAt = TaskDate.timestampString(from: Date())
+                return done
+            }(),
         ]
         return TaskEntry(date: Date(), tasks: tasks, errorMessage: nil)
     }

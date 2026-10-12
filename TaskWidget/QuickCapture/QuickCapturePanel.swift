@@ -81,8 +81,8 @@ final class QuickCaptureController {
         panel.isVisible ? hide() : show()
     }
 
-    func show() {
-        session.prepare(tasks: store.tasks, projects: store.projects)
+    func show(mode: QuickCaptureMode? = nil) {
+        session.prepare(tasks: store.tasks, projects: store.projects, mode: mode)
         panel.fitToContent()
         position(panel)
         panel.makeKeyAndOrderFront(nil)

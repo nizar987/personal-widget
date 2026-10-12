@@ -14,6 +14,9 @@ struct ContentView: View {
     let store: TaskStore
     let noteStore: NoteStore
     let router: AppRouter
+    /// Used when ⌘N is pressed on a screen with no task quick-add (notes, reports): the
+    /// quick-capture panel opens instead. Set by the AppDelegate after launch.
+    var onQuickCapture: ((QuickCaptureMode) -> Void)?
     @State private var selection: SidebarItem? = .smart(.today)
     @State private var selectedTaskID: Int?
     @State private var search = ""
@@ -133,10 +136,14 @@ struct ContentView: View {
             .help("Refresh (⌘R)")
 
             Button {
-                if selection == .smart(.completed) || !currentItem.isTaskList && currentItem != .calendar {
+                if currentItem == .notes {
+                    onQuickCapture?(.note)
+                } else if selection == .smart(.completed) || !currentItem.isTaskList && currentItem != .calendar {
                     selection = .smart(.today)
+                    quickAddFocused = true
+                } else {
+                    quickAddFocused = true
                 }
-                quickAddFocused = true
             } label: {
                 Label("New Task", systemImage: "plus")
             }

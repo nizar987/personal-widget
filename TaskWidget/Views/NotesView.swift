@@ -14,6 +14,10 @@ struct NotesView: View {
             quickAdd
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
+                .padding(.bottom, 8)
+
+            searchBar
+                .padding(.horizontal, 16)
                 .padding(.bottom, 10)
 
             if store.isLoading && store.notes.isEmpty {
@@ -30,7 +34,6 @@ struct NotesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task { await store.load() }
-        .searchable(text: searchBinding, placement: .toolbar, prompt: "Search notes")
         .sheet(item: $editingNote) { note in
             NoteEditorSheet(note: note, text: $editText) { newContent in
                 _Concurrency.Task { await store.update(note, content: newContent) }
@@ -39,14 +42,54 @@ struct NotesView: View {
         }
     }
 
+    /// In-view search field (kept inside NotesView, not the toolbar — the window already
+    /// owns a toolbar search item, and a second one crashes AppKit's NSToolbar).
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.tertiary)
+            TextField("Search notes", text: searchBinding)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+            if !store.search.isEmpty {
+                Button {
+                    store.search = ""
+                    _Concurrency.Task { await store.load() }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear search")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
     private var searchBinding: Binding<String> {
         Binding(
             get: { store.search },
             set: { value in
                 store.search = value
-                _Concurrency.Task { await store.load() }
+                debounceLoad()
             }
         )
+    }
+
+    @State private var searchTask: _Concurrency.Task<Void, Never>?
+
+    /// Debounce so each keystroke doesn't fire a network request.
+    private func debounceLoad() {
+        searchTask?.cancel()
+        searchTask = _Concurrency.Task {
+            try? await _Concurrency.Task.sleep(for: .milliseconds(280))
+            guard !_Concurrency.Task.isCancelled else { return }
+            await store.load()
+        }
     }
 
     // MARK: - Quick add

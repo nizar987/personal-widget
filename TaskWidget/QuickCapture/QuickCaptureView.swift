@@ -30,7 +30,15 @@ struct QuickCaptureView: View {
 
     /// `//` at the start forces note mode without touching the picker.
     private var effectiveMode: QuickCaptureMode {
-        session.text.hasPrefix("//") ? .note : session.mode
+        if session.text.hasPrefix("//") { return .note }
+        return session.requestedMode ?? session.mode
+    }
+
+    /// The `//` prefix makes `effectiveMode` .note while `session.mode` stays .task, so a
+    /// manual picker switch afterwards looked ignored. Keep the two in sync.
+    private func syncModeWithText() {
+        let forced: QuickCaptureMode = session.text.hasPrefix("//") ? .note : session.mode
+        if session.mode != forced { session.mode = forced }
     }
 
     var body: some View {
@@ -116,9 +124,16 @@ struct QuickCaptureView: View {
         })
         .onPreferenceChange(QuickCaptureSizeKey.self) { onSizeChange($0) }
         .onExitCommand(perform: onClose)
-        .onAppear { focused = true }
+        .onAppear {
+            focused = true
+            syncModeWithText()
+        }
+        .onChange(of: session.text) { syncModeWithText() }
         .onChange(of: session.presentation) {
             savedPulse = 0
+            if let requested = session.requestedMode {
+                session.mode = requested
+            }
             focused = true
         }
     }
@@ -127,11 +142,8 @@ struct QuickCaptureView: View {
         HStack(spacing: 2) {
             ForEach(QuickCaptureMode.allCases, id: \.rawValue) { mode in
                 Button {
-                    session.mode = mode
-                    // Drop the `//` prefix when switching back to task manually.
-                    if mode == .task, session.text.hasPrefix("//") {
-                        session.text = String(session.text.dropFirst(2)).trimmingCharacters(in: .whitespaces)
-                    }
+                    session.chooseMode(mode)
+                    focused = true
                 } label: {
                     Label(mode.title, systemImage: mode.icon)
                         .font(.system(size: 10, weight: .semibold, design: .rounded))

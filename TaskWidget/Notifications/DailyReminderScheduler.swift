@@ -15,6 +15,7 @@ final class DailyReminderScheduler: NSObject {
     static let categoryID = "taskwidget.daily"
     static let understoodActionID = "taskwidget.daily.understood"
     private static let acknowledgedKey = "reminder.acknowledgedDays"
+    private static let testIdentifierPrefix = "taskwidget.test."
 
     private let center = UNUserNotificationCenter.current()
     private var tasks: [Task] = []
@@ -112,7 +113,23 @@ final class DailyReminderScheduler: NSObject {
     }
 
     /// Sends today's reminder now (Settings → "Send test notification").
-    func sendTest() async {
+    /// Returns a user-facing reason when the notification couldn't be shown.
+    func sendTest() async -> String? {
+        if await center.notificationSettings().authorizationStatus == .notDetermined {
+            await requestAuthorization()
+        }
+        let settings = await center.notificationSettings()
+        authorization = settings.authorizationStatus
+        guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
+            return "Notifications are turned off for TaskWidget."
+        }
+
+        // Re-using one identifier makes macOS silently replace the previous test in
+        // Notification Center instead of showing a banner, so clear old tests and use a fresh id.
+        let oldTests = await center.deliveredNotifications()
+            .map(\.request.identifier).filter { $0.hasPrefix(Self.testIdentifierPrefix) }
+        center.removeDeliveredNotifications(withIdentifiers: oldTests)
+
         let today = Calendar.current.startOfDay(for: Date())
         let open = tasks.filter { !$0.completed }
         let due = open.filter { $0.dueDay == today }
@@ -127,7 +144,17 @@ final class DailyReminderScheduler: NSObject {
         content.sound = .default
         content.categoryIdentifier = Self.categoryID
         content.userInfo = ["day": "test"]
-        try? await center.add(UNNotificationRequest(identifier: "taskwidget.test", content: content, trigger: nil))
+        let identifier = "\(Self.testIdentifierPrefix)\(UUID().uuidString)"
+        do {
+            try await center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+        } catch {
+            reminderLog.error("test notification failed: \(error.localizedDescription, privacy: .public)")
+            return "Couldn't send: \(error.localizedDescription)"
+        }
+        if settings.alertSetting != .enabled {
+            return "Sent to Notification Center, but banners are off for TaskWidget."
+        }
+        return nil
     }
 
     // MARK: - Acknowledgement

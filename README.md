@@ -5,7 +5,7 @@ reports and a global quick-capture hotkey. Data lives in a small local Rust serv
 ([`backend/`](backend/README.md)) on `127.0.0.1:3220`.
 
 - **Quick capture** — press **⌥Space** anywhere, type `Fix bug #wms !high besok`, press ↵
-- **Desktop widget** — small / medium / large, check tasks off right on the desktop
+- **Desktop widget** — small / medium / large: check off, snooze, switch lists, page through, add
 - **App window** — smart lists, projects, editor, search, calendar, weekly reports
 - **Morning reminder** — at 08:00 a notification lists today's tasks, repeating up to 3× until you press **Understood**
 - **Menu bar** — today's tasks, new task, open window; the Dock icon only shows while the window is open
@@ -63,7 +63,12 @@ exist are skipped, so it's safe to run again.
 1. Open `TaskWidget.xcodeproj`. Xcode fetches the `KeyboardShortcuts` package automatically.
 2. Select the **TaskWidget** project → **Signing & Capabilities**.
 3. For **both** targets, **TaskWidget** and **TaskWidgetExtension**, choose your **Team**
-   (*Add Account…* if it's empty). Without a team the widget may refuse to load.
+   (*Add Account…* if it's empty — a free Apple ID works).
+
+> **Required for an interactive widget.** macOS only runs widget buttons and checkboxes for
+> extensions signed with a Team ID. An ad-hoc build ("Sign to Run Locally") shows the widget, but
+> every click just opens the app. Check with
+> `codesign -dvv /Applications/TaskWidget.app 2>&1 | grep TeamIdentifier` — it must not say `not set`.
 
 ### 5. Build and install to /Applications
 
@@ -103,6 +108,21 @@ macOS asks for permission to send notifications on first launch — click **Allo
    **Widget style: Full-color** (otherwise it turns grey when the desktop isn't focused).
 
 You only do this once — macOS keeps the widget on the desktop across logins.
+
+**What you can click in the widget**
+
+| | Small | Medium | Large |
+|---|---|---|---|
+| ○ check a task off (today's done tasks stay struck through — click again to undo) | ✓ | ✓ | ✓ |
+| Switch list: Today · Upcoming · Important · Someday | tap the title | tab pills | tab pills |
+| ‹ 1/2 › page through long lists | ✓ | ✓ | ✓ |
+| ↪ snooze a today/overdue task to tomorrow | | ✓ | ✓ |
+| ＋ open quick capture | ✓ | ✓ | ✓ |
+| Tap a day in the next-7-days strip to see that day | | | ✓ |
+| Today's progress ring (done / due) | | ✓ | ✓ |
+| ↗ open the app (clicks on empty space do nothing) | ✓ | ✓ | ✓ |
+
+Each widget size remembers its own list and page.
 
 ### 8. Try quick capture
 
@@ -184,6 +204,7 @@ Every change refreshes the desktop widget immediately.
 | Problem | Fix |
 |---|---|
 | Widget/app says **Backend offline** | `curl -s http://127.0.0.1:3220/api/health`; if it fails, `launchctl kickstart -k gui/$(id -u)/com.taskwidget.server` and check `~/Library/Logs/TaskWidget/server.log` |
+| Clicking anything in the widget just opens the app | The build isn't signed with a Team (step 4). Set it for both targets, rebuild, replace the app, `pkill -f TaskWidgetExtension` |
 | Widget shows *Failed to load widget… error 5* | Set the **Team** on both targets (step 4), clean (⇧⌘K) and rebuild |
 | TaskWidget missing in **Edit Widgets** | Open the app from /Applications once, then log out and back in |
 | Widget still uses an old server/port | Remove stray copies of `TaskWidget.app`, then `pkill -f TaskWidgetExtension` |
