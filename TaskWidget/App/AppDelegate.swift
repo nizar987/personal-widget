@@ -50,8 +50,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = TaskStore()
     let noteStore = NoteStore()
     let router = AppRouter()
-    /// Set in `applicationDidFinishLaunching`; ContentView reads it for the ⌘N toolbar button.
-    private(set) var quickCaptureOpener: ((QuickCaptureMode) -> Void)?
     private(set) lazy var quickCapture = QuickCaptureController(store: store, noteStore: noteStore)
     private var refreshTimer: Timer?
     private static let refreshInterval: TimeInterval = 5 * 60
@@ -66,7 +64,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Launching (e.g. at login) pulls fresh data into the desktop widget.
         WidgetCenter.shared.reloadAllTimelines()
-        quickCaptureOpener = { [weak self] mode in self?.quickCapture.show(mode: mode) }
         let shortcut = KeyboardShortcuts.getShortcut(for: .quickCapture).map { "\($0)" } ?? "none"
         quickCaptureLog.info("registering quick capture hotkey: \(shortcut, privacy: .public)")
         KeyboardShortcuts.onKeyUp(for: .quickCapture) { [weak self] in

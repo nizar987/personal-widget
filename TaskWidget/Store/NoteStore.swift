@@ -22,6 +22,8 @@ final class NoteStore {
         do {
             let query = search.trimmingCharacters(in: .whitespaces)
             let fresh = try await api.fetchNotes(search: query.isEmpty ? nil : query)
+            // A newer search started while this one was in flight; let it win.
+            guard query == search.trimmingCharacters(in: .whitespaces) else { return }
             withAnimation(springy) { notes = fresh }
             isOffline = false
             errorMessage = nil

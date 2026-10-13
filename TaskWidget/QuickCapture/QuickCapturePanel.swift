@@ -102,15 +102,30 @@ final class QuickCaptureController {
     }
 
     /// Tab / ↑ / ↓ / ↵ / Esc drive autocomplete. They're intercepted before the text field's
-    /// editor sees them, and only while suggestions are visible.
+    /// editor sees them, and only while suggestions are visible; with none showing, Tab
+    /// switches task ↔ note. ⌘T / ⌘N pick task / note directly.
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.panel,
-                  let key = QuickCaptureSession.Key(keyCode: event.keyCode),
+            guard let self, event.window === self.panel else { return event }
+            if let mode = Self.modeShortcut(for: event) {
+                self.session.chooseMode(mode)
+                return nil
+            }
+            guard let key = QuickCaptureSession.Key(keyCode: event.keyCode),
                   event.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift]) || key != .returnKey
             else { return event }
             return self.session.handle(key) ? nil : event
+        }
+    }
+
+    /// ⌘T → task, ⌘N → note. Matches the typed character so it follows the keyboard layout.
+    private static func modeShortcut(for event: NSEvent) -> QuickCaptureMode? {
+        guard event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command else { return nil }
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case "t": return .task
+        case "n": return .note
+        default: return nil
         }
     }
 
