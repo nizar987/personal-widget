@@ -8,6 +8,7 @@ enum QuickCaptureMode: String, CaseIterable {
 
     var title: String { rawValue.capitalized }
     var icon: String { self == .task ? "checkmark.circle" : "note.text" }
+    var shortcutLabel: String { self == .task ? "⌘T" : "⌘N" }
 }
 
 @Observable
@@ -48,8 +49,15 @@ final class QuickCaptureSession {
         return projects.first ?? "Inbox"
     }
 
+    /// `//` at the start forces note mode without touching the picker.
+    var effectiveMode: QuickCaptureMode {
+        if text.hasPrefix("//") { return .note }
+        return requestedMode ?? mode
+    }
+
+    /// Notes are saved as typed, so they never get autocomplete.
     var suggestions: [QuickCaptureSuggestion] {
-        guard dismissedText != text else { return [] }
+        guard effectiveMode == .task, dismissedText != text else { return [] }
         return QuickCaptureSuggester.suggestions(for: text, projects: projects, openCounts: openCounts, history: history)
     }
 
@@ -75,7 +83,12 @@ final class QuickCaptureSession {
         text = suggestion.completion
     }
 
-    /// User tapped a mode in the picker — their choice wins from now on.
+    /// ⇥ (when no suggestion is showing): flip between task and note without the mouse.
+    func toggleMode() {
+        chooseMode(effectiveMode == .task ? .note : .task)
+    }
+
+    /// User picked a mode (picker click, ⇥, ⌘T / ⌘N) — their choice wins from now on.
     func chooseMode(_ newMode: QuickCaptureMode) {
         mode = newMode
         requestedMode = nil
@@ -101,10 +114,15 @@ final class QuickCaptureSession {
         }
     }
 
-    /// Returns true when the key was used for autocomplete (so the text field shouldn't see it).
+    /// Returns true when the key was consumed (so the text field shouldn't see it): by
+    /// autocomplete, or ⇥ switching task ↔ note when there's nothing to complete.
     func handle(_ key: Key) -> Bool {
         let list = suggestions
-        guard !list.isEmpty else { return false }
+        guard !list.isEmpty else {
+            guard key == .tab else { return false }
+            toggleMode()
+            return true
+        }
         let index = min(selectedIndex, list.count - 1)
         switch key {
         case .tab:

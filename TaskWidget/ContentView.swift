@@ -14,9 +14,6 @@ struct ContentView: View {
     let store: TaskStore
     let noteStore: NoteStore
     let router: AppRouter
-    /// Used when ⌘N is pressed on a screen with no task quick-add (notes, reports): the
-    /// quick-capture panel opens instead. Set by the AppDelegate after launch.
-    var onQuickCapture: ((QuickCaptureMode) -> Void)?
     @State private var selection: SidebarItem? = .smart(.today)
     @State private var selectedTaskID: Int?
     @State private var search = ""
@@ -35,7 +32,7 @@ struct ContentView: View {
             }
             .navigationTitle(currentItem.title)
         }
-        .searchable(text: $search, placement: .toolbar, prompt: "Search tasks")
+        .searchable(text: $search, placement: .toolbar, prompt: "Search")
         .toolbar { toolbar }
         .task { await store.load() }
         .onChange(of: selection) { selectedTaskID = nil }
@@ -90,7 +87,7 @@ struct ContentView: View {
         case .report:
             WeeklyReportView(store: store, weekStart: reportWeekBinding, selectedTaskID: $selectedTaskID)
         case .notes:
-            NotesView(store: noteStore)
+            NotesView(store: noteStore, search: search, composerFocus: $quickAddFocused)
         case .smart, .project:
             TaskListView(item: currentItem, store: store, selectedTaskID: $selectedTaskID,
                          search: search, quickAddFocus: $quickAddFocused)
@@ -137,7 +134,7 @@ struct ContentView: View {
 
             Button {
                 if currentItem == .notes {
-                    onQuickCapture?(.note)
+                    quickAddFocused = true
                 } else if selection == .smart(.completed) || !currentItem.isTaskList && currentItem != .calendar {
                     selection = .smart(.today)
                     quickAddFocused = true
@@ -145,10 +142,10 @@ struct ContentView: View {
                     quickAddFocused = true
                 }
             } label: {
-                Label("New Task", systemImage: "plus")
+                Label(currentItem == .notes ? "New Note" : "New Task", systemImage: "plus")
             }
             .keyboardShortcut("n", modifiers: .command)
-            .help("New Task (⌘N)")
+            .help(currentItem == .notes ? "New Note (⌘N)" : "New Task (⌘N)")
         }
     }
 

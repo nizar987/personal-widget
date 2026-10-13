@@ -134,7 +134,11 @@ Press **⌥Space** from any app, type a task, press **↵**. That's it.
 |---|---|
 | ↵ | Add and close |
 | ⇧↵ | Add and keep the panel open for the next task |
+| ⇥ | Switch Task ↔ Note (when no autocomplete suggestion is showing) |
+| ⌘T / ⌘N | Switch to Task / Note |
 | Esc / click outside | Close |
+
+Typing `//` at the start also saves the text as a note.
 
 **Autocomplete** appears while you type: `#` lists your projects, `!` the priorities, `@` or the
 start of a date word (`bes…`, `fri…`, `jum…`) the dates with what they resolve to, and the start of
@@ -175,8 +179,8 @@ section links to System Settings.
 
 ## Using the app
 
-- **Sidebar** — *Today, Upcoming, Important, Someday, All Tasks, Completed*, **Calendar**, the
-  last six **Weekly Reports**, and your **Projects**.
+- **Sidebar** — *Today, Upcoming, Important, Someday, All Tasks, Completed*, **Calendar**,
+  **Notes**, the last six **Weekly Reports**, and your **Projects**.
 - **Add** — the *Add a task…* bar at the top of each list; defaults follow the list (Today →
   due today, Important → high priority, a project → that project).
 - **Edit** — click a task: the editor docks on the right (or opens as a sheet in a narrow
@@ -185,6 +189,11 @@ section links to System Settings.
   shows calendar / edit / delete buttons.
 - **Calendar** — month grid with tasks per day; click a day to see and add its tasks; **drag a
   task onto another day** to reschedule.
+- **Notes** — plain-text notes, newest first, grouped by Today / Yesterday / Previous 7 Days /
+  Earlier. Write in the box at the top (**↵** saves, **⌥↵** new line; the first line is the
+  title). Click a note to edit it in place (**Esc** cancels); hover or right-click to copy,
+  edit or delete. The toolbar search field searches notes while you're on this page; **⌘N**
+  jumps to the note box.
 - **Weekly report** — completed (vs last week), created, completion rate of tasks due that week,
   overdue, a daily chart, breakdowns by project and priority, and the tasks behind them.
 - **Shortcuts** — ⌘N new task · ⌘R refresh · ⌘, settings · search field in the toolbar.

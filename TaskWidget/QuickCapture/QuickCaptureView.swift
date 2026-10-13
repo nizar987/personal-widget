@@ -28,11 +28,7 @@ struct QuickCaptureView: View {
         return t.trimmingCharacters(in: .whitespaces)
     }
 
-    /// `//` at the start forces note mode without touching the picker.
-    private var effectiveMode: QuickCaptureMode {
-        if session.text.hasPrefix("//") { return .note }
-        return session.requestedMode ?? session.mode
-    }
+    private var effectiveMode: QuickCaptureMode { session.effectiveMode }
 
     /// The `//` prefix makes `effectiveMode` .note while `session.mode` stays .task, so a
     /// manual picker switch afterwards looked ignored. Keep the two in sync.
@@ -138,27 +134,41 @@ struct QuickCaptureView: View {
         }
     }
 
+    /// Task / Note switch. ⇥ flips it (when no suggestion is showing); ⌘T / ⌘N pick directly.
     private var modePicker: some View {
-        HStack(spacing: 2) {
-            ForEach(QuickCaptureMode.allCases, id: \.rawValue) { mode in
-                Button {
-                    session.chooseMode(mode)
-                    focused = true
-                } label: {
-                    Label(mode.title, systemImage: mode.icon)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule().fill(effectiveMode == mode ? Color.accentColor.opacity(0.18) : Color.clear)
-                        )
-                        .foregroundStyle(effectiveMode == mode ? Color.accentColor : .secondary)
+        HStack(spacing: 4) {
+            HStack(spacing: 2) {
+                ForEach(QuickCaptureMode.allCases, id: \.rawValue) { mode in
+                    Button {
+                        session.chooseMode(mode)
+                        focused = true
+                    } label: {
+                        Label(mode.title, systemImage: mode.icon)
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule().fill(effectiveMode == mode ? Color.accentColor.opacity(0.18) : Color.clear)
+                            )
+                            .foregroundStyle(effectiveMode == mode ? Color.accentColor : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("\(mode.title) (\(mode.shortcutLabel))")
                 }
-                .buttonStyle(.plain)
             }
+            .padding(2)
+            .background(Capsule().fill(Color.primary.opacity(0.05)))
+            .animation(AppStyle.spring, value: effectiveMode)
+
+            Text("⇥")
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.15)))
+                .help("Tab switches Task ↔ Note")
         }
-        .padding(2)
-        .background(Capsule().fill(Color.primary.opacity(0.05)))
     }
 
     private var syntaxHint: some View {
