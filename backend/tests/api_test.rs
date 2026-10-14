@@ -326,3 +326,76 @@ async fn note_validation_rejects_bad_input() {
         (StatusCode::NOT_FOUND, json!("note_not_found"))
     );
 }
+
+#[tokio::test]
+async fn scheduled_date_is_optional_settable_clearable_and_in_views() {
+    let app = app();
+    let today = Local::now().date_naive();
+    let today_s = today.format("%Y-%m-%d").to_string();
+    let next_week = (today + chrono::Days::new(10))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    // Due later, but planned for today → it's on today's view.
+    let (status, body) = call(
+        &app,
+        Method::POST,
+        "/api/tasks",
+        Some(json!({
+            "title": "write report", "project": "wms", "priority": "medium",
+            "due_date": next_week, "scheduled_date": today_s,
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let id = body["data"]["id"].as_i64().unwrap();
+    assert_eq!(body["data"]["scheduled_date"], json!(today_s));
+
+    // Omitted → null.
+    let plain = create(&app, "no plan", None).await;
+    assert_eq!(plain["scheduled_date"], Value::Null);
+
+    let (_, today_view) = call(&app, Method::GET, "/api/tasks?view=today", None).await;
+    let titles: Vec<_> = today_view["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["title"].clone())
+        .collect();
+    assert_eq!(titles, [json!("write report")]);
+
+    // Plain date filters still only look at the due date.
+    let (_, by_due) = call(
+        &app,
+        Method::GET,
+        &format!("/api/tasks?from={today_s}&to={today_s}"),
+        None,
+    )
+    .await;
+    assert!(by_due["data"].as_array().unwrap().is_empty());
+
+    let (status, cleared) = call(
+        &app,
+        Method::PATCH,
+        &format!("/api/tasks/{id}"),
+        Some(json!({ "scheduled_date": null })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{cleared}");
+    assert_eq!(cleared["data"]["scheduled_date"], Value::Null);
+    assert_eq!(
+        cleared["data"]["due_date"],
+        json!(next_week),
+        "due date untouched"
+    );
+
+    let (status, bad) = call(
+        &app,
+        Method::PATCH,
+        &format!("/api/tasks/{id}"),
+        Some(json!({ "scheduled_date": "2026-02-30" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(bad["error"], json!("invalid_scheduled_date"));
+}

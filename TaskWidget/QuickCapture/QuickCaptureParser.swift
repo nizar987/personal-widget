@@ -6,6 +6,8 @@ struct QuickCaptureDraft: Equatable {
     var project: String?
     var priority: Priority?
     var due: Date?
+    /// Do date: the day to work on it.
+    var scheduled: Date? = nil
 }
 
 /// Parses inline shortcuts out of a one-line task, English and Indonesian:
@@ -15,6 +17,9 @@ struct QuickCaptureDraft: Equatable {
 /// - `today` `hari ini` · `tomorrow` `tmrw` `besok` · `lusa` · `next week` `minggu depan`
 /// - weekdays: `friday` `next friday` `jumat` `hari minggu`, or any `@fri` / `@minggu`
 /// - `in 3 days` `3 hari lagi` · `12/10` `12/10/2026` `2026-10-12` · `12 okt` `oct 12`
+///
+/// A date on its own is the **do date** (when you'll work on it). Put `due`, `deadline`, `dl`,
+/// `by` or `sebelum` in front of it to set the **due date** instead: `besok due jumat`.
 ///
 /// Recognised tokens are removed from the title; when a field appears twice the last one wins.
 enum QuickCaptureParser {
@@ -34,8 +39,12 @@ enum QuickCaptureParser {
             } else if let priority = priority(token) {
                 draft.priority = priority
                 i += 1
-            } else if let (date, used) = DatePhrase.match(tokens, at: i, today: today, calendar: calendar) {
+            } else if dueMarkers.contains(token.lowercased()),
+                      let (date, used) = DatePhrase.match(tokens, at: i + 1, today: today, calendar: calendar) {
                 draft.due = date
+                i += 1 + used
+            } else if let (date, used) = DatePhrase.match(tokens, at: i, today: today, calendar: calendar) {
+                draft.scheduled = date
                 i += used
             } else {
                 kept.append(token)
@@ -45,6 +54,9 @@ enum QuickCaptureParser {
         draft.title = kept.joined(separator: " ")
         return draft
     }
+
+    /// Words that turn the following date into the due date.
+    static let dueMarkers: Set<String> = ["due", "deadline", "dl", "by", "sebelum"]
 
     // MARK: - Project & priority
 

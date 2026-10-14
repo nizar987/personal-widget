@@ -39,10 +39,10 @@ All responses use `{"ok": true, "data": …}` or `{"ok": false, "error": "<code>
 | Method   | Path                      | Notes |
 |----------|---------------------------|-------|
 | `GET`    | `/api/health`             | Service name and version |
-| `GET`    | `/api/tasks`              | Filters: `project`, `priority`, `completed=true\|false`, `from`, `to` (YYYY-MM-DD). `view=today\|week` (open tasks), `view=projects` (names) |
-| `POST`   | `/api/tasks`              | `title`, `project`, `priority` required; `description`, `due_date`, `calendar_event_id` optional → `201` |
+| `GET`    | `/api/tasks`              | Filters: `project`, `priority`, `completed=true\|false`, `from`, `to` (YYYY-MM-DD). `view=today\|week` (open tasks due *or* planned in that range), `view=projects` (names) |
+| `POST`   | `/api/tasks`              | `title`, `project`, `priority` required; `description`, `due_date`, `scheduled_date` (do date), `calendar_event_id` optional → `201` |
 | `GET`    | `/api/tasks/:id`          | |
-| `PATCH`  | `/api/tasks/:id`          | Any subset of fields; `"due_date": null` clears the date |
+| `PATCH`  | `/api/tasks/:id`          | Any subset of fields; `"due_date": null` / `"scheduled_date": null` clears that date |
 | `DELETE` | `/api/tasks/:id`          | `{"ok": true, "message": "deleted"}` |
 | `POST`   | `/api/tasks/:id/toggle`   | Flips `completed` |
 | `GET`    | `/api/notes`              | Plain notes, newest first. `search=<substring>` (literal, case-insensitive), `limit=<n>` (1–500) |
@@ -53,7 +53,7 @@ All responses use `{"ok": true, "data": …}` or `{"ok": false, "error": "<code>
 
 Error codes: `invalid_json`, `invalid_id`, `title_required`, `title_too_long` (200),
 `project_required`, `project_too_long` (60), `description_too_long` (2000), `invalid_priority`,
-`invalid_due_date`, `invalid_completed`, `task_not_found`, `not_found`, `internal_error`,
+`invalid_due_date`, `invalid_scheduled_date`, `invalid_completed`, `task_not_found`, `not_found`, `internal_error`,
 `content_required`, `content_too_long` (20000), `invalid_limit`, `note_not_found`.
 
 ## Develop

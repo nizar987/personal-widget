@@ -34,6 +34,7 @@ pub fn parse_new_task(body: &Value) -> Result<NewTask> {
         .and_then(Priority::parse)
         .ok_or(ValidationError("invalid_priority"))?;
     let due_date = nullable_due_date(obj)?.flatten();
+    let scheduled_date = nullable_scheduled_date(obj)?.flatten();
     let calendar_event_id = nullable_string(obj, "calendar_event_id").flatten();
 
     Ok(NewTask {
@@ -42,6 +43,7 @@ pub fn parse_new_task(body: &Value) -> Result<NewTask> {
         project,
         priority,
         due_date,
+        scheduled_date,
         calendar_event_id,
     })
 }
@@ -75,6 +77,7 @@ pub fn parse_changes(body: &Value) -> Result<TaskChanges> {
         changes.priority = Some(parsed.ok_or(ValidationError("invalid_priority"))?);
     }
     changes.due_date = nullable_due_date(obj)?;
+    changes.scheduled_date = nullable_scheduled_date(obj)?;
     changes.calendar_event_id = nullable_string(obj, "calendar_event_id");
     if let Some(value) = obj.get("completed") {
         changes.completed = Some(
@@ -147,8 +150,20 @@ fn nullable_string(obj: &Map<String, Value>, key: &str) -> Option<Option<String>
 }
 
 fn nullable_due_date(obj: &Map<String, Value>) -> Result<Option<Option<String>>> {
-    match nullable_string(obj, "due_date") {
-        Some(Some(date)) if !is_valid_date(&date) => Err(ValidationError("invalid_due_date")),
+    nullable_date(obj, "due_date", "invalid_due_date")
+}
+
+fn nullable_scheduled_date(obj: &Map<String, Value>) -> Result<Option<Option<String>>> {
+    nullable_date(obj, "scheduled_date", "invalid_scheduled_date")
+}
+
+fn nullable_date(
+    obj: &Map<String, Value>,
+    key: &str,
+    invalid: &'static str,
+) -> Result<Option<Option<String>>> {
+    match nullable_string(obj, key) {
+        Some(Some(date)) if !is_valid_date(&date) => Err(ValidationError(invalid)),
         other => Ok(other),
     }
 }

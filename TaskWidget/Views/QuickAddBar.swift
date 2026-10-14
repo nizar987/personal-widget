@@ -1,16 +1,18 @@
 import SwiftUI
 
-/// Inline "Add a task…" field. Enter saves; chips pick project, priority and due date.
+/// Inline "Add a task…" field. Enter saves; chips pick project, priority, do date and due date.
 struct QuickAddBar: View {
     let defaults: QuickAddDefaults
     let projects: [String]
     var focus: FocusState<Bool>.Binding
-    let onAdd: (_ title: String, _ project: String, _ priority: Priority, _ due: Date?) async -> Bool
+    let onAdd: (_ title: String, _ project: String, _ priority: Priority, _ due: Date?,
+                _ scheduled: Date?) async -> Bool
 
     @State private var title = ""
     @State private var project = ""
     @State private var priority: Priority = .medium
     @State private var due: Date?
+    @State private var scheduled: Date?
     @State private var isSaving = false
     @State private var showsNewProject = false
     @State private var newProject = ""
@@ -46,6 +48,7 @@ struct QuickAddBar: View {
             HStack(spacing: 6) {
                 projectMenu
                 priorityMenu
+                doMenu
                 dueMenu
                 Spacer()
             }
@@ -57,6 +60,7 @@ struct QuickAddBar: View {
         .onChange(of: defaults.project) { applyDefaults() }
         .onChange(of: defaults.due) { applyDefaults() }
         .onChange(of: defaults.priority) { applyDefaults() }
+        .onChange(of: defaults.scheduled) { applyDefaults() }
         .alert("New Project", isPresented: $showsNewProject) {
             TextField("Project name", text: $newProject)
             Button("Cancel", role: .cancel) {}
@@ -92,24 +96,46 @@ struct QuickAddBar: View {
         .fixedSize()
     }
 
-    private var dueMenu: some View {
+    /// When you'll work on it.
+    private var doMenu: some View {
         Menu {
-            ForEach(DueChoice.allCases) { choice in
-                Button(choice.title, systemImage: choice.icon) { due = choice.date }
+            Section("Do on") {
+                ForEach(DueChoice.allCases) { choice in
+                    Button(choice.title, systemImage: choice.icon) { scheduled = choice.date }
+                }
             }
         } label: {
-            Chip(text: dueText, icon: "calendar", tint: due == nil ? .secondary : Palette.upcoming)
+            Chip(text: scheduled.map { "Do \(dayText($0))" } ?? "Do: any day", icon: "play.circle",
+                 tint: scheduled == nil ? .secondary : Palette.important)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+        .help("Do date — the day you plan to work on it")
     }
 
-    private var dueText: String {
-        guard let due else { return "No date" }
-        if due == TaskDate.day(offset: 0) { return "Today" }
-        if due == TaskDate.day(offset: 1) { return "Tomorrow" }
-        return due.formatted(.dateTime.month(.abbreviated).day())
+    /// The deadline.
+    private var dueMenu: some View {
+        Menu {
+            Section("Due by") {
+                ForEach(DueChoice.allCases) { choice in
+                    Button(choice.title, systemImage: choice.icon) { due = choice.date }
+                }
+            }
+        } label: {
+            Chip(text: due.map { "Due \(dayText($0))" } ?? "No deadline", icon: "flag.checkered",
+                 tint: due == nil ? .secondary : Palette.upcoming)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Due date — when it has to be done by")
+    }
+
+    private func dayText(_ day: Date) -> String {
+        if day == TaskDate.day(offset: 0) { return "today" }
+        if day == TaskDate.day(offset: 1) { return "tomorrow" }
+        return day.formatted(.dateTime.month(.abbreviated).day())
     }
 
     // MARK: - Actions
@@ -118,6 +144,7 @@ struct QuickAddBar: View {
         if let p = defaults.project { project = p }
         priority = defaults.priority
         due = defaults.due
+        scheduled = defaults.scheduled
     }
 
     private func submit() {
@@ -125,7 +152,7 @@ struct QuickAddBar: View {
         let text = title
         isSaving = true
         _Concurrency.Task {
-            let ok = await onAdd(text, resolvedProject, priority, due)
+            let ok = await onAdd(text, resolvedProject, priority, due, scheduled)
             isSaving = false
             if ok {
                 title = ""

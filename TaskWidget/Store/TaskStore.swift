@@ -49,13 +49,14 @@ final class TaskStore {
 
     @discardableResult
     func create(title: String, project: String, priority: Priority,
-                due: Date?, description: String? = nil) async -> Bool {
+                due: Date?, scheduled: Date? = nil, description: String? = nil) async -> Bool {
         let input = NewTaskInput(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             project: project.trimmingCharacters(in: .whitespacesAndNewlines),
             priority: priority,
             due_date: due.map(TaskDate.string(from:)),
-            description: description
+            description: description,
+            scheduled_date: scheduled.map(TaskDate.string(from:))
         )
         do {
             let created = try await api.createTask(input)

@@ -4,25 +4,32 @@ import UserNotifications
 
 private let reminderLog = Logger(subsystem: "com.multiagent.taskwidget", category: "reminders")
 
-/// Schedules the morning "tasks due today" notifications and handles the Understood action.
+/// Schedules task reminders (see `DailyReminderPlanner`) and handles their actions.
 ///
-/// Notifications are planned 7 days ahead and re-planned whenever tasks or settings change,
-/// so the text always reflects the latest tasks and reminders still fire if the app is closed.
+/// The plan is rebuilt whenever tasks or settings change, the day rolls over, and on every
+/// background refresh — so the text always matches the latest tasks, repeats are topped up
+/// past the 64-pending limit, and summaries a week ahead still fire if the app is closed.
 @MainActor
 final class DailyReminderScheduler: NSObject {
     static let shared = DailyReminderScheduler()
 
     static let categoryID = "taskwidget.daily"
-    static let understoodActionID = "taskwidget.daily.understood"
-    private static let acknowledgedKey = "reminder.acknowledgedDays"
+    /// Reminders about exactly one task also offer "Mark as Done".
+    static let singleTaskCategoryID = "taskwidget.daily.single"
+    static let snoozeActionID = "taskwidget.daily.snooze"
+    static let doneActionID = "taskwidget.daily.done"
+    private static let snoozeKey = "reminder.snoozedUntil"
+    private static let summaryDaysKey = "reminder.summaryDays"
     private static let testIdentifierPrefix = "taskwidget.test."
+    private static let snoozeDuration: TimeInterval = 60 * 60
 
     private let center = UNUserNotificationCenter.current()
     private var tasks: [Task] = []
     private var pendingReschedule: _Concurrency.Task<Void, Never>?
-    private var hasScheduled = false
     /// Opens the main window when the notification body is clicked.
     var onOpenApp: (() -> Void)?
+    /// "Mark as Done" on a single-task reminder.
+    var onCompleteTask: ((Int) -> Void)?
 
     private(set) var authorization: UNAuthorizationStatus = .notDetermined
 
@@ -30,10 +37,13 @@ final class DailyReminderScheduler: NSObject {
     func configure() {
         DailyReminderSettings.registerDefaults()
         center.delegate = self
-        let understood = UNNotificationAction(identifier: Self.understoodActionID, title: "Understood", options: [])
+        let snooze = UNNotificationAction(identifier: Self.snoozeActionID, title: "Snooze 1 Hour", options: [])
+        let done = UNNotificationAction(identifier: Self.doneActionID, title: "Mark as Done", options: [])
         center.setNotificationCategories([
-            UNNotificationCategory(identifier: Self.categoryID, actions: [understood], intentIdentifiers: [],
+            UNNotificationCategory(identifier: Self.categoryID, actions: [snooze], intentIdentifiers: [],
                                    options: []),
+            UNNotificationCategory(identifier: Self.singleTaskCategoryID, actions: [done, snooze],
+                                   intentIdentifiers: [], options: []),
         ])
         NotificationCenter.default.addObserver(self, selector: #selector(dayChanged),
                                                name: .NSCalendarDayChanged, object: nil)
@@ -46,13 +56,14 @@ final class DailyReminderScheduler: NSObject {
             reminderLog.error("notification authorization failed: \(error.localizedDescription, privacy: .public)")
         }
         authorization = await center.notificationSettings().authorizationStatus
+        reminderLog.info("notification authorization: \(self.authorization.rawValue)")
     }
 
     // MARK: - Planning
 
-    /// Debounced: store mutations arrive in bursts.
+    /// Debounced: store mutations arrive in bursts. Also called on every background load,
+    /// which is what rolls repeats forward past the pending-notification limit.
     func tasksChanged(_ tasks: [Task]) {
-        guard tasks != self.tasks || !hasScheduled else { return }
         self.tasks = tasks
         scheduleRefresh()
     }
@@ -75,44 +86,62 @@ final class DailyReminderScheduler: NSObject {
     }
 
     private func reschedule() async {
-        let reminders = DailyReminderPlanner.plan(tasks: tasks, settings: .load(),
-                                                  acknowledgedDays: acknowledgedDays())
+        let now = Date()
+        let settings = DailyReminderSettings.load()
+        let today = TaskDate.string(from: now)
+        let summaryDays = self.summaryDays()
+        let reminders = DailyReminderPlanner.plan(tasks: tasks, settings: settings, snoozedUntil: snoozedUntil(),
+                                                  summaryDeliveredToday: summaryDays.contains(today), now: now)
+
         let pending = await center.pendingNotificationRequests()
             .map(\.identifier).filter { $0.hasPrefix(DailyReminderPlanner.identifierPrefix) }
         center.removePendingNotificationRequests(withIdentifiers: pending)
 
-        // If today no longer needs a reminder (all done / acknowledged), clear what's on screen too.
-        let today = TaskDate.string(from: Date())
+        // Earlier days' reminders are stale once the day changes.
+        let todayPrefix = "\(DailyReminderPlanner.identifierPrefix)\(today)."
+        let stale = await center.deliveredNotifications().map(\.request.identifier)
+            .filter { $0.hasPrefix(DailyReminderPlanner.identifierPrefix) && !$0.hasPrefix(todayPrefix) }
+        center.removeDeliveredNotifications(withIdentifiers: stale)
+        // Nothing left for today (all done, or reminders off): clear what's on screen too.
         if !reminders.contains(where: { $0.dayKey == today }) {
             await removeDelivered(forDay: today)
         }
 
         for reminder in reminders {
             do {
-                try await center.add(request(for: reminder))
+                try await center.add(request(for: reminder, now: now))
             } catch {
                 reminderLog.error("schedule failed: \(error.localizedDescription, privacy: .public)")
             }
         }
-        hasScheduled = true
-        reminderLog.info("scheduled \(reminders.count) reminders")
+        recordSummaryDays(reminders, settings: settings, now: now)
+        let summaries = reminders.filter { $0.kind == .summary }.count
+        let next = reminders.map(\.fireDate).min().map { "\($0)" } ?? "none"
+        reminderLog.info("scheduled \(summaries) summaries, \(reminders.count - summaries) repeats; next \(next, privacy: .public)")
     }
 
-    private func request(for reminder: DailyReminder) -> UNNotificationRequest {
+    private func request(for reminder: DailyReminder, now: Date) -> UNNotificationRequest {
         let content = UNMutableNotificationContent()
         content.title = reminder.title
         if let subtitle = reminder.subtitle { content.subtitle = subtitle }
         content.body = reminder.body
         content.sound = .default
-        content.categoryIdentifier = Self.categoryID
+        content.categoryIdentifier = reminder.taskID == nil ? Self.categoryID : Self.singleTaskCategoryID
         content.threadIdentifier = "\(Self.categoryID).\(reminder.dayKey)"
-        content.userInfo = ["day": reminder.dayKey]
-        let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminder.fireDate)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
+        var info: [String: Any] = ["day": reminder.dayKey]
+        if let id = reminder.taskID { info["taskID"] = id }
+        content.userInfo = info
+        // Catch-up summaries are due now: deliver immediately.
+        let trigger: UNNotificationTrigger? = reminder.fireDate <= now.addingTimeInterval(1)
+            ? nil
+            : UNCalendarNotificationTrigger(
+                dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second],
+                                                              from: reminder.fireDate),
+                repeats: false)
         return UNNotificationRequest(identifier: reminder.identifier, content: content, trigger: trigger)
     }
 
-    /// Sends today's reminder now (Settings → "Send test notification").
+    /// Sends today's summary now (Settings → "Send test notification").
     /// Returns a user-facing reason when the notification couldn't be shown.
     func sendTest() async -> String? {
         if await center.notificationSettings().authorizationStatus == .notDetermined {
@@ -130,17 +159,19 @@ final class DailyReminderScheduler: NSObject {
             .map(\.request.identifier).filter { $0.hasPrefix(Self.testIdentifierPrefix) }
         center.removeDeliveredNotifications(withIdentifiers: oldTests)
 
-        let today = Calendar.current.startOfDay(for: Date())
-        let open = tasks.filter { !$0.completed }
-        let due = open.filter { $0.dueDay == today }
-        let overdue = open.filter { ($0.dueDay ?? .distantFuture) < today }
-        let message = due.isEmpty && overdue.isEmpty
-            ? (title: "Nothing due today", body: "This is how your morning reminder will look.")
-            : DailyReminderPlanner.message(due: due, overdue: overdue)
+        let now = Date()
+        let today = Calendar.current.startOfDay(for: now)
+        let agenda = DayAgenda(tasks: tasks, day: today)
         let content = UNMutableNotificationContent()
-        content.title = message.title
+        if agenda.isEmpty {
+            content.title = "Nothing to do 🎉"
+            content.body = "This is how your daily summary will look."
+        } else {
+            let summary = DailyReminderPlanner.summary(agenda, dayKey: "test", day: today, at: now)
+            content.title = summary.title
+            content.body = summary.body
+        }
         content.subtitle = "Test"
-        content.body = message.body
         content.sound = .default
         content.categoryIdentifier = Self.categoryID
         content.userInfo = ["day": "test"]
@@ -157,22 +188,37 @@ final class DailyReminderScheduler: NSObject {
         return nil
     }
 
-    // MARK: - Acknowledgement
+    // MARK: - Snooze
 
-    private func acknowledgedDays() -> Set<String> {
-        Set(UserDefaults.standard.stringArray(forKey: Self.acknowledgedKey) ?? [])
+    private func snoozedUntil() -> Date? {
+        let date = UserDefaults.standard.object(forKey: Self.snoozeKey) as? Date
+        return date.flatMap { $0 > Date() ? $0 : nil }
     }
 
-    /// Stops the remaining repeats for `day`. Keeps two weeks of history.
-    private func acknowledge(day: String) async {
-        let cutoff = TaskDate.string(from: TaskDate.day(offset: -14))
-        let days = (acknowledgedDays().filter { $0 >= cutoff }).union([day])
-        UserDefaults.standard.set(Array(days).sorted(), forKey: Self.acknowledgedKey)
-        let ids = (1...DailyReminderSettings.load().repeatCount)
-            .map { "\(DailyReminderPlanner.identifierPrefix)\(day).\($0)" }
-        center.removePendingNotificationRequests(withIdentifiers: ids)
-        await removeDelivered(forDay: day)
-        reminderLog.info("acknowledged \(day, privacy: .public)")
+    /// Pauses repeats for an hour; the daily summary is unaffected.
+    private func snooze() {
+        UserDefaults.standard.set(Date().addingTimeInterval(Self.snoozeDuration), forKey: Self.snoozeKey)
+        reminderLog.info("snoozed for an hour")
+        scheduleRefresh()
+    }
+
+    // MARK: - Summary bookkeeping
+
+    /// Days whose summary has been scheduled (or sent as a catch-up). Lets a summary missed
+    /// because the app wasn't running yet be sent late, once.
+    private func summaryDays() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: Self.summaryDaysKey) ?? [])
+    }
+
+    private func recordSummaryDays(_ reminders: [DailyReminder], settings: DailyReminderSettings, now: Date) {
+        let today = TaskDate.string(from: now)
+        let cutoff = TaskDate.string(from: TaskDate.day(offset: -14, from: now))
+        let startPassed = settings.start(of: Calendar.current.startOfDay(for: now)).map { $0 <= now } ?? false
+        // Past days stay recorded; today only once its summary time has passed (it fired);
+        // future days follow the current plan.
+        var days = summaryDays().filter { $0 >= cutoff && ($0 < today || ($0 == today && startPassed)) }
+        days.formUnion(reminders.filter { $0.kind == .summary }.map(\.dayKey))
+        UserDefaults.standard.set(Array(days).sorted(), forKey: Self.summaryDaysKey)
     }
 
     private func removeDelivered(forDay day: String) async {
@@ -193,15 +239,20 @@ extension DailyReminderScheduler: UNUserNotificationCenterDelegate {
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             didReceive response: UNNotificationResponse) async {
-        let day = response.notification.request.content.userInfo["day"] as? String
-        await handle(action: response.actionIdentifier, day: day)
+        let taskID = response.notification.request.content.userInfo["taskID"] as? Int
+        await handle(action: response.actionIdentifier, taskID: taskID)
     }
 
-    private func handle(action: String, day: String?) async {
-        if action == Self.understoodActionID, let day, day != "test" {
-            await acknowledge(day: day)
-        } else if action == UNNotificationDefaultActionIdentifier {
+    private func handle(action: String, taskID: Int?) async {
+        switch action {
+        case Self.snoozeActionID:
+            snooze()
+        case Self.doneActionID:
+            if let taskID { onCompleteTask?(taskID) }
+        case UNNotificationDefaultActionIdentifier:
             onOpenApp?()
+        default:
+            break
         }
     }
 }

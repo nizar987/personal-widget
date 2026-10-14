@@ -111,7 +111,8 @@ enum QuickCaptureSuggester {
             .filter { $0.hasPrefix(q) && $0 != q }
             .compactMap { word -> QuickCaptureSuggestion? in
                 let phrase = prefix + word
-                guard let date = QuickCaptureParser.parse(phrase, now: now, calendar: calendar).due else { return nil }
+                let parsed = QuickCaptureParser.parse(phrase, now: now, calendar: calendar)
+                guard let date = parsed.scheduled ?? parsed.due else { return nil }
                 return QuickCaptureSuggestion(kind: .date, label: phrase, detail: describe(date, now: now, calendar: calendar),
                                               completion: "\(head)\(phrase) ")
             }

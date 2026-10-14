@@ -156,7 +156,8 @@ final class QuickCaptureController {
         } else {
             let project = draft.project ?? session.defaultProject
             ok = await store.create(title: draft.title, project: project,
-                                    priority: draft.priority ?? .medium, due: draft.due)
+                                    priority: draft.priority ?? .medium, due: draft.due,
+                                    scheduled: draft.scheduled)
             if !ok { session.errorMessage = store.errorMessage ?? "Couldn't save the task." }
         }
         guard ok else { return false }

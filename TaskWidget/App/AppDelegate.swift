@@ -55,9 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let refreshInterval: TimeInterval = 5 * 60
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // Must be set before launch completes so "Understood" taps that launched the app arrive.
+        // Must be set before launch completes so notification actions that launched the app arrive.
         DailyReminderScheduler.shared.configure()
         DailyReminderScheduler.shared.onOpenApp = { [weak self] in self?.showMainWindow() }
+        DailyReminderScheduler.shared.onCompleteTask = { [weak self] id in self?.completeTask(id: id) }
         store.onTasksChanged = { DailyReminderScheduler.shared.tasksChanged($0) }
     }
 
@@ -113,6 +114,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshInBackground() {
         _Concurrency.Task { await store.load() }
+    }
+
+    /// "Mark as Done" from a reminder. The app may have just been launched by the action,
+    /// so load tasks first when they aren't there yet.
+    private func completeTask(id: Int) {
+        _Concurrency.Task {
+            if store.task(id: id) == nil { await store.load() }
+            guard let task = store.task(id: id), !task.completed else { return }
+            await store.toggle(task)
+        }
     }
 
     /// `taskwidget://` links from the widget.

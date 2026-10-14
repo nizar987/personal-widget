@@ -55,8 +55,13 @@ struct TaskRowView: View {
 
     private var meta: some View {
         HStack(spacing: 6) {
+            if let doText = DoLabel.text(for: task, now: Date()) {
+                Chip(text: doText, icon: "play.circle", tint: task.completed ? .secondary : DoLabel.color(for: task, now: Date()))
+                    .help("Do date")
+            }
             if let due = DueLabel.text(for: task, now: Date()) {
-                Chip(text: due, icon: "calendar", tint: task.completed ? .secondary : DueLabel.color(for: task, now: Date()))
+                Chip(text: due, icon: "flag.checkered", tint: task.completed ? .secondary : DueLabel.color(for: task, now: Date()))
+                    .help("Due date")
             }
             Chip(text: task.project, icon: "folder", tint: Palette.project)
             if task.priority == .high && !task.completed {
@@ -70,18 +75,14 @@ struct TaskRowView: View {
     private var hoverActions: some View {
         HStack(spacing: 2) {
             Menu {
-                ForEach(DueChoice.allCases) { choice in
-                    Button { onUpdate(TaskPatch(dueDate: choice.date.map { .set(TaskDate.string(from: $0)) } ?? .clear)) } label: {
-                        Label(choice.title, systemImage: choice.icon)
-                    }
-                }
+                DateChoiceMenus(onUpdate: onUpdate)
             } label: {
                 Image(systemName: "calendar")
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .frame(width: 26)
-            .help("Change due date")
+            .help("Change do date or due date")
 
             iconButton("pencil", help: "Edit", action: onSelect)
             iconButton("trash", help: "Delete", tint: Palette.today, action: onDelete)
@@ -122,13 +123,7 @@ struct TaskContextMenu: View {
                 }
             }
         }
-        Menu("Due Date") {
-            ForEach(DueChoice.allCases) { choice in
-                Button(choice.title, systemImage: choice.icon) {
-                    onUpdate(TaskPatch(dueDate: choice.date.map { .set(TaskDate.string(from: $0)) } ?? .clear))
-                }
-            }
-        }
+        DateChoiceMenus(onUpdate: onUpdate)
         Menu("Move to Project") {
             ForEach(projects.filter { $0 != task.project }, id: \.self) { p in
                 Button(p) { onUpdate(TaskPatch(project: p)) }
@@ -137,5 +132,31 @@ struct TaskContextMenu: View {
         .disabled(projects.count < 2)
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
+    }
+}
+
+/// "Do On" and "Due Date" submenus with the quick day choices.
+struct DateChoiceMenus: View {
+    let onUpdate: (TaskPatch) -> Void
+
+    var body: some View {
+        Menu("Do On") {
+            ForEach(DueChoice.allCases) { choice in
+                Button(choice.title, systemImage: choice.icon) {
+                    onUpdate(TaskPatch(scheduledDate: change(choice)))
+                }
+            }
+        }
+        Menu("Due Date") {
+            ForEach(DueChoice.allCases) { choice in
+                Button(choice.title, systemImage: choice.icon) {
+                    onUpdate(TaskPatch(dueDate: change(choice)))
+                }
+            }
+        }
+    }
+
+    private func change(_ choice: DueChoice) -> TaskPatch.DueDate {
+        choice.date.map { .set(TaskDate.string(from: $0)) } ?? .clear
     }
 }

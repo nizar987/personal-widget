@@ -396,7 +396,7 @@ struct WeekStrip: View {
             if case .day(let d) = selected { return d == day }
             return isToday && selected == .today
         }()
-        let dayTasks = tasks.filter { !$0.completed && $0.dueDay == day }
+        let dayTasks = tasks.filter { !$0.completed && $0.planDay == day }
         // Today maps to the Today list, which also includes overdue tasks.
         let target: WidgetTab = isToday ? .today : .day(day)
 
