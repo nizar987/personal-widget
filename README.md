@@ -7,7 +7,7 @@ reports and a global quick-capture hotkey. Data lives in a small local Rust serv
 - **Quick capture** — press **⌥Space** anywhere, type `Fix bug #wms !high besok`, press ↵
 - **Desktop widget** — small / medium / large: check off, snooze, switch lists, page through, add
 - **App window** — smart lists, projects, editor, search, calendar, weekly reports
-- **Morning reminder** — at 08:00 a notification lists today's tasks, repeating up to 3× until you press **Understood**
+- **Reminders** — a daily summary of everything open (with deadlines, including tasks without a due date); due and overdue tasks repeat until done
 - **Menu bar** — today's tasks, new task, open window; the Dock icon only shows while the window is open
 
 ## Requirements
@@ -167,15 +167,24 @@ due in 3 days. Without `#project` the task goes to the project you used last.
 a new combination (it warns about conflicts). **Reset to ⌥Space** restores the default. If
 Raycast or Alfred already uses ⌥Space, pick something else here.
 
-## Daily reminder
+## Reminders
 
-Every morning at **08:00**, if anything is due that day (or overdue), a notification lists those
-tasks. If you don't press **Understood**, it shows again **15 minutes later, up to 3 times** in
-total. Completing all of the day's tasks cancels the remaining repeats automatically.
+**Daily summary** — every day at **08:00** a notification lists everything still open, each with
+when it's due: overdue (`overdue 2 days`), due today, due this week (`due Fri (in 3 days)`) and
+tasks **without a due date** (`no deadline`). Due dates are optional; undated tasks show up in the
+summary every day until you complete them.
 
-Settings → **Daily Reminder** lets you turn it off, change the time, change the repeat interval
-(5–60 min) and **Send test notification**. If macOS notifications are off for TaskWidget, the same
-section links to System Settings.
+**Repeats until done** — tasks that are **due today or overdue** are repeated every **hour**
+(after the summary) until **21:00**, and again the next day, until you mark them done. A
+reminder about a single task has **Mark as Done**; every reminder has **Snooze 1 Hour**.
+Completing the tasks clears the remaining repeats and removes the ones on screen.
+
+If the app wasn't running at summary time (Mac off, logged in late), the summary is sent as soon
+as it starts, once per day.
+
+Settings → **Reminders**: turn them off, change the summary time, the repeat interval
+(15 min – 3 h) and the end time, and **Send test notification**. If macOS notifications are off
+for TaskWidget, the same section links to System Settings.
 
 ## Using the app
 
