@@ -15,6 +15,8 @@ struct TaskEditorView: View {
     @State private var priority: Priority = .medium
     @State private var hasDue = false
     @State private var due = Date()
+    @State private var hasScheduled = false
+    @State private var scheduled = Date()
     @State private var confirmDelete = false
 
     var body: some View {
@@ -40,7 +42,17 @@ struct TaskEditorView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                 }
-                field("Due Date") { dueField }
+                field("Do On") {
+                    dateField("Plan a day to work on it", isOn: $hasScheduled, date: $scheduled)
+                }
+                field("Due Date") {
+                    dateField("Has a deadline", isOn: $hasDue, date: $due)
+                }
+                if hasScheduled && hasDue && TaskDate.string(from: scheduled) > TaskDate.string(from: due) {
+                    Label("The do date is after the due date.", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(Palette.upcoming)
+                }
                 footer
             }
             .padding(16)
@@ -53,6 +65,7 @@ struct TaskEditorView: View {
         .onAppear(perform: reset)
         .onChange(of: task.id) { reset() }
         .animation(AppStyle.spring, value: hasDue)
+        .animation(AppStyle.spring, value: hasScheduled)
     }
 
     // MARK: - Sections
@@ -91,29 +104,30 @@ struct TaskEditorView: View {
         }
     }
 
-    private var dueField: some View {
+    /// Switch + calendar + Today / Tomorrow / Next Week buttons. Used for the do date and the due date.
+    private func dateField(_ toggleLabel: String, isOn: Binding<Bool>, date: Binding<Date>) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Toggle("Has due date", isOn: $hasDue)
+            Toggle(toggleLabel, isOn: isOn)
                 .toggleStyle(.switch)
                 .controlSize(.small)
-            if hasDue {
-                DatePicker("", selection: $due, displayedComponents: .date)
+            if isOn.wrappedValue {
+                DatePicker("", selection: date, displayedComponents: .date)
                     .datePickerStyle(.graphical)
                     .labelsHidden()
                     .frame(maxWidth: .infinity)
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 6) { quickDueButtons }
-                    VStack(alignment: .leading, spacing: 6) { quickDueButtons }
+                    HStack(spacing: 6) { quickDayButtons(date) }
+                    VStack(alignment: .leading, spacing: 6) { quickDayButtons(date) }
                 }
             }
         }
     }
 
     @ViewBuilder
-    private var quickDueButtons: some View {
+    private func quickDayButtons(_ date: Binding<Date>) -> some View {
         ForEach(DueChoice.allCases.filter { $0 != .none }) { choice in
-            Button(choice.title) { if let d = choice.date { due = d } }
+            Button(choice.title) { if let d = choice.date { date.wrappedValue = d } }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .fixedSize()
@@ -160,12 +174,14 @@ struct TaskEditorView: View {
     private var trimmedTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var trimmedProject: String { project.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var draftDue: String? { hasDue ? TaskDate.string(from: due) : nil }
+    private var draftScheduled: String? { hasScheduled ? TaskDate.string(from: scheduled) : nil }
 
     private var isValid: Bool { !trimmedTitle.isEmpty && !trimmedProject.isEmpty }
 
     private var hasChanges: Bool {
         trimmedTitle != task.title || notes != task.description || trimmedProject != task.project
             || priority != task.priority || draftDue != task.dueDay.map(TaskDate.string(from:))
+            || draftScheduled != task.scheduledDay.map(TaskDate.string(from:))
     }
 
     private func reset() {
@@ -175,6 +191,8 @@ struct TaskEditorView: View {
         priority = task.priority
         hasDue = task.dueDay != nil
         due = task.dueDay ?? TaskDate.day(offset: 0)
+        hasScheduled = task.scheduledDay != nil
+        scheduled = task.scheduledDay ?? TaskDate.day(offset: 0)
     }
 
     private func save() {
@@ -185,6 +203,9 @@ struct TaskEditorView: View {
         if priority != task.priority { patch.priority = priority }
         if draftDue != task.dueDay.map(TaskDate.string(from:)) {
             patch.dueDate = draftDue.map { .set($0) } ?? .clear
+        }
+        if draftScheduled != task.scheduledDay.map(TaskDate.string(from:)) {
+            patch.scheduledDate = draftScheduled.map { .set($0) } ?? .clear
         }
         onSave(patch)
     }

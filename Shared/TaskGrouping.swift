@@ -51,6 +51,24 @@ extension Task {
         return d <= Calendar.current.startOfDay(for: now)
     }
 
+    /// Do date ("work on it on…") at local midnight, or nil when not planned.
+    var scheduledDay: Date? {
+        guard let scheduledDate, !scheduledDate.isEmpty else { return nil }
+        return TaskDate.date(from: scheduledDate)
+    }
+
+    /// The day it belongs to in lists and the calendar: the do date, or the due date when
+    /// that comes first (or is the only date).
+    var planDay: Date? {
+        [scheduledDay, dueDay].compactMap { $0 }.min()
+    }
+
+    /// On today's list: planned for today or earlier, or due by today.
+    func isPlannedByToday(_ now: Date = Date()) -> Bool {
+        guard let d = planDay else { return false }
+        return d <= Calendar.current.startOfDay(for: now)
+    }
+
     var createdDate: Date? { TaskDate.timestamp(from: createdAt) }
     var completedDate: Date? { completed ? TaskDate.timestamp(from: completedAt ?? updatedAt) : nil }
 
@@ -77,9 +95,9 @@ enum TaskSort {
         a.priority.rank > b.priority.rank
     }
 
-    /// Dated tasks first (soonest first), then by priority.
+    /// Dated tasks first (soonest do/due day first), then by priority.
     static func byDateThenPriority(_ a: Task, _ b: Task) -> Bool {
-        switch (a.dueDay, b.dueDay) {
+        switch (a.planDay, b.planDay) {
         case let (x?, y?) where x != y: return x < y
         case (nil, _?): return false
         case (_?, nil): return true
@@ -90,27 +108,27 @@ enum TaskSort {
 
 /// Buckets open tasks into mutually exclusive LockDay-style sections.
 struct TaskGroups {
-    /// Overdue or due today.
+    /// Overdue, due today, or planned for today (or earlier and not done).
     let today: [Task]
     /// High priority, not due yet.
     let important: [Task]
-    /// Dated in the future, non-high priority.
+    /// Planned or due in the future, non-high priority.
     let upcoming: [Task]
-    /// No due date, non-high priority.
+    /// No do date and no due date, non-high priority.
     let someday: [Task]
     /// Everything with a date, soonest first (today included).
     let upNext: [Task]
 
     init(tasks: [Task], today now: Date) {
         let open = tasks.filter { !$0.completed }
-        let dueToday = open.filter { $0.isDueByToday(now) }
-        let rest = open.filter { !$0.isDueByToday(now) }
+        let onToday = open.filter { $0.isPlannedByToday(now) }
+        let rest = open.filter { !$0.isPlannedByToday(now) }
 
-        today = dueToday.sorted(by: TaskSort.byDateThenPriority)
+        today = onToday.sorted(by: TaskSort.byDateThenPriority)
         important = rest.filter { $0.priority == .high }.sorted(by: TaskSort.byDateThenPriority)
-        upcoming = rest.filter { $0.priority != .high && $0.dueDay != nil }.sorted(by: TaskSort.byDateThenPriority)
-        someday = rest.filter { $0.priority != .high && $0.dueDay == nil }.sorted(by: TaskSort.byPriority)
-        upNext = open.filter { $0.dueDay != nil }.sorted(by: TaskSort.byDateThenPriority)
+        upcoming = rest.filter { $0.priority != .high && $0.planDay != nil }.sorted(by: TaskSort.byDateThenPriority)
+        someday = rest.filter { $0.priority != .high && $0.planDay == nil }.sorted(by: TaskSort.byPriority)
+        upNext = open.filter { $0.planDay != nil }.sorted(by: TaskSort.byDateThenPriority)
     }
 }
 
@@ -136,5 +154,29 @@ enum DueLabel {
     static func color(for task: Task, now: Date) -> Color {
         guard task.dueDay != nil else { return .secondary }
         return task.isOverdue(now) ? Palette.today : Palette.color(for: task.priority)
+    }
+}
+
+/// Labels for the do date chip.
+enum DoLabel {
+    private static let short: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("MMM d")
+        return f
+    }()
+
+    /// "Today", "Since Oct 12" (planned earlier, not done yet), "Tmrw", or "Oct 12"; nil when unplanned.
+    static func text(for task: Task, now: Date) -> String? {
+        guard let day = task.scheduledDay else { return nil }
+        let today = Calendar.current.startOfDay(for: now)
+        if day < today { return "Since \(short.string(from: day))" }
+        if day == today { return "Today" }
+        if day == TaskDate.day(offset: 1, from: now) { return "Tmrw" }
+        return short.string(from: day)
+    }
+
+    static func color(for task: Task, now: Date) -> Color {
+        guard let day = task.scheduledDay else { return .secondary }
+        return day <= Calendar.current.startOfDay(for: now) ? Palette.important : .secondary
     }
 }

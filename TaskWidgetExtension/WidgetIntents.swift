@@ -61,7 +61,8 @@ struct WidgetNoOpIntent: AppIntent {
     }
 }
 
-/// Pushes a task's due date to tomorrow.
+/// Moves a task to tomorrow: a due date that has arrived moves to tomorrow, and the do date
+/// (when set, or when there's nothing else to move) becomes tomorrow.
 struct SnoozeTaskIntent: AppIntent {
     static var title: LocalizedStringResource = "Snooze Task to Tomorrow"
     static var isDiscoverable = false
@@ -76,7 +77,11 @@ struct SnoozeTaskIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         let tomorrow = TaskDate.string(from: TaskDate.day(offset: 1))
-        _ = try await APIClient.shared.updateTask(id: taskId, TaskPatch(dueDate: .set(tomorrow)))
+        let task = try? await APIClient.shared.fetchTasks().first { $0.id == taskId }
+        var patch = TaskPatch()
+        if let due = task?.dueDay, due <= TaskDate.day(offset: 0) { patch.dueDate = .set(tomorrow) }
+        if task?.scheduledDay != nil || patch.dueDate == nil { patch.scheduledDate = .set(tomorrow) }
+        _ = try await APIClient.shared.updateTask(id: taskId, patch)
         return .result()
     }
 }

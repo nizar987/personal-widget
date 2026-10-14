@@ -144,6 +144,8 @@ fn open_between(from: chrono::NaiveDate, to: chrono::NaiveDate) -> TaskFilter {
         completed: Some(false),
         due_from: Some(from.format("%Y-%m-%d").to_string()),
         due_to: Some(to.format("%Y-%m-%d").to_string()),
+        // Views answer "what's on these days": due then, or planned for then.
+        include_scheduled: true,
         ..TaskFilter::default()
     }
 }
@@ -166,6 +168,7 @@ fn filter_from(q: &ListQuery) -> Result<TaskFilter, ApiError> {
         completed: q.completed.as_deref().map(|c| c == "true"),
         due_from: date(&q.from)?,
         due_to: date(&q.to)?,
+        include_scheduled: false,
     })
 }
 

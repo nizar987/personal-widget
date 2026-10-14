@@ -30,7 +30,7 @@ struct MonthGridView: View {
     }
 
     private var tasksByDay: [Date: [Task]] {
-        Dictionary(grouping: tasks.filter { $0.dueDay != nil }) { $0.dueDay ?? .distantPast }
+        Dictionary(grouping: tasks.filter { $0.planDay != nil }) { $0.planDay ?? .distantPast }
             .mapValues { $0.sorted { ($0.completed ? 1 : 0, -$0.priority.rank) < ($1.completed ? 1 : 0, -$1.priority.rank) } }
     }
 

@@ -32,7 +32,8 @@ const SCHEMA: &str = "
         completed INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        completed_at TEXT DEFAULT NULL
+        completed_at TEXT DEFAULT NULL,
+        scheduled_date TEXT DEFAULT NULL
     );
     -- Replaces the old idx_tasks_completed / idx_tasks_due_date / idx_tasks_project trio:
     -- `completed` alone has only 2 distinct values, so a single-column index on it made the
@@ -64,7 +65,7 @@ const COMPLETED_AT_ON_DONE: &str =
     "completed_at = CASE WHEN completed = 0 THEN datetime('now') ELSE completed_at END";
 
 const COLUMNS: &str = "id, title, description, project, priority, due_date, calendar_event_id, \
-    completed, created_at, updated_at, completed_at";
+    completed, created_at, updated_at, completed_at, scheduled_date";
 
 /// Undated tasks last, then soonest due date, then high → low priority.
 const ORDER: &str = "ORDER BY due_date IS NULL, due_date ASC, \
@@ -115,14 +116,30 @@ impl TaskRepo {
             clauses.push("completed = ?");
             values.push(i64::from(completed).into());
         }
-        if let Some(from) = &filter.due_from {
-            clauses.push("due_date >= ?");
-            values.push(from.clone().into());
-        }
-        if let Some(to) = &filter.due_to {
-            clauses.push("due_date <= ?");
-            values.push(to.clone().into());
-        }
+        // Bounds on one date column; with `include_scheduled`, either date may match.
+        let range = |column: &str, values: &mut Vec<SqlValue>| {
+            let mut parts = Vec::new();
+            if let Some(from) = &filter.due_from {
+                parts.push(format!("{column} >= ?"));
+                values.push(from.clone().into());
+            }
+            if let Some(to) = &filter.due_to {
+                parts.push(format!("{column} <= ?"));
+                values.push(to.clone().into());
+            }
+            parts.join(" AND ")
+        };
+        let due_range = range("due_date", &mut values);
+        let date_clause = if due_range.is_empty() {
+            None
+        } else if filter.include_scheduled {
+            let scheduled_range = range("scheduled_date", &mut values);
+            Some(format!("(({due_range}) OR ({scheduled_range}))"))
+        } else {
+            Some(due_range)
+        };
+        let mut clauses: Vec<String> = clauses.into_iter().map(str::to_owned).collect();
+        clauses.extend(date_clause);
         let condition = if clauses.is_empty() {
             String::new()
         } else {
@@ -150,15 +167,17 @@ impl TaskRepo {
     pub fn create(&self, task: &NewTask) -> RepoResult<Task> {
         let conn = self.lock()?;
         conn.execute(
-            "INSERT INTO tasks (title, description, project, priority, due_date, calendar_event_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO tasks (title, description, project, priority, due_date, calendar_event_id,
+                 scheduled_date)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 task.title,
                 task.description,
                 task.project,
                 task.priority.as_str(),
                 task.due_date,
-                task.calendar_event_id
+                task.calendar_event_id,
+                task.scheduled_date
             ],
         )?;
         let id = conn.last_insert_rowid();
@@ -191,6 +210,9 @@ impl TaskRepo {
         }
         if let Some(v) = &changes.due_date {
             push("due_date", v.clone().into());
+        }
+        if let Some(v) = &changes.scheduled_date {
+            push("scheduled_date", v.clone().into());
         }
         if let Some(v) = &changes.calendar_event_id {
             push("calendar_event_id", v.clone().into());
@@ -255,8 +277,8 @@ impl TaskRepo {
         {
             let mut stmt = tx.prepare(
                 "INSERT OR IGNORE INTO tasks (id, title, description, project, priority, due_date,
-                     calendar_event_id, completed, created_at, updated_at, completed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                     calendar_event_id, completed, created_at, updated_at, completed_at, scheduled_date)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             )?;
             for t in tasks {
                 inserted += stmt.execute(params![
@@ -270,7 +292,8 @@ impl TaskRepo {
                     i64::from(t.completed),
                     t.created_at,
                     t.updated_at,
-                    completed_at_for_import(t)
+                    completed_at_for_import(t),
+                    t.scheduled_date
                 ])?;
             }
         }
@@ -279,13 +302,19 @@ impl TaskRepo {
     }
 }
 
-/// Adds `completed_at` to databases created before it existed. Existing done tasks get their
+/// Adds columns to databases created before they existed. Existing done tasks get their
 /// `updated_at` as the best available completion time.
 fn migrate(conn: &Connection) -> RepoResult<()> {
-    let has_column = conn
-        .prepare("SELECT 1 FROM pragma_table_info('tasks') WHERE name = 'completed_at'")?
-        .exists([])?;
-    if !has_column {
+    let has_column = |name: &str| -> RepoResult<bool> {
+        Ok(conn
+            .prepare("SELECT 1 FROM pragma_table_info('tasks') WHERE name = ?1")?
+            .exists(params![name])?)
+    };
+    if !has_column("scheduled_date")? {
+        conn.execute_batch("ALTER TABLE tasks ADD COLUMN scheduled_date TEXT DEFAULT NULL;")?;
+        tracing::info!("migrated tasks table: added scheduled_date");
+    }
+    if !has_column("completed_at")? {
         conn.execute_batch(
             "ALTER TABLE tasks ADD COLUMN completed_at TEXT DEFAULT NULL;
              UPDATE tasks SET completed_at = updated_at WHERE completed = 1;",
@@ -332,6 +361,7 @@ struct RawTask {
     created_at: String,
     updated_at: String,
     completed_at: Option<String>,
+    scheduled_date: Option<String>,
 }
 
 fn read_row(row: &Row<'_>) -> rusqlite::Result<RawTask> {
@@ -347,6 +377,7 @@ fn read_row(row: &Row<'_>) -> rusqlite::Result<RawTask> {
         created_at: row.get(8)?,
         updated_at: row.get(9)?,
         completed_at: row.get(10)?,
+        scheduled_date: row.get(11)?,
     })
 }
 
@@ -361,6 +392,7 @@ impl RawTask {
             project: self.project,
             priority,
             due_date: self.due_date,
+            scheduled_date: self.scheduled_date,
             calendar_event_id: self.calendar_event_id,
             completed: self.completed != 0,
             created_at: self.created_at,
@@ -510,6 +542,7 @@ mod tests {
             project: "wms".into(),
             priority,
             due_date: due.map(Into::into),
+            scheduled_date: None,
             calendar_event_id: None,
         }
     }
@@ -593,6 +626,7 @@ mod tests {
             project: "wms".into(),
             priority: Priority::Medium,
             due_date: None,
+            scheduled_date: None,
             calendar_event_id: None,
             completed: true,
             created_at: "2026-01-01 00:00:00".into(),
@@ -651,6 +685,51 @@ mod tests {
     }
 
     #[test]
+    fn scheduled_date_roundtrips_and_clears() {
+        let repo = TaskRepo::in_memory().unwrap();
+        let mut input = new_task("Plan", Priority::Low, Some("2026-10-20"));
+        input.scheduled_date = Some("2026-10-15".into());
+        let t = repo.create(&input).unwrap();
+        assert_eq!(t.scheduled_date.as_deref(), Some("2026-10-15"));
+        let changes = TaskChanges {
+            scheduled_date: Some(None),
+            ..Default::default()
+        };
+        let updated = repo.update(t.id, &changes).unwrap().unwrap();
+        assert_eq!(updated.scheduled_date, None);
+        assert_eq!(updated.due_date.as_deref(), Some("2026-10-20"));
+    }
+
+    #[test]
+    fn list_range_can_include_scheduled_date() {
+        let repo = TaskRepo::in_memory().unwrap();
+        let mut planned = new_task("planned", Priority::Low, Some("2026-12-01"));
+        planned.scheduled_date = Some("2026-10-15".into());
+        repo.create(&planned).unwrap();
+        repo.create(&new_task("due", Priority::Low, Some("2026-10-15")))
+            .unwrap();
+        repo.create(&new_task("other", Priority::Low, Some("2026-11-01")))
+            .unwrap();
+        let day = |include_scheduled| TaskFilter {
+            due_from: Some("2026-10-15".into()),
+            due_to: Some("2026-10-15".into()),
+            include_scheduled,
+            ..Default::default()
+        };
+        let titles = |f: TaskFilter| -> Vec<String> {
+            repo.list(&f)
+                .unwrap()
+                .into_iter()
+                .map(|t| t.title)
+                .collect()
+        };
+        assert_eq!(titles(day(false)), ["due"]);
+        let mut both = titles(day(true));
+        both.sort();
+        assert_eq!(both, ["due", "planned"]);
+    }
+
+    #[test]
     fn migrates_legacy_schema_and_backfills_completed_at() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
@@ -675,6 +754,14 @@ mod tests {
         };
         assert_eq!(by_title("done").as_deref(), Some("2026-10-01 10:00:00"));
         assert_eq!(by_title("open"), None);
+        // The do-date column is added too, so writing it works on an old database.
+        let open = tasks.iter().find(|x| x.title == "open").unwrap();
+        let changes = TaskChanges {
+            scheduled_date: Some(Some("2026-10-03".into())),
+            ..Default::default()
+        };
+        let planned = repo.update(open.id, &changes).unwrap().unwrap();
+        assert_eq!(planned.scheduled_date.as_deref(), Some("2026-10-03"));
     }
 
     // MARK: - Indexing plan (read-only verification)
@@ -686,7 +773,11 @@ mod tests {
         "idx_tasks_project_nocase",
         "idx_notes_updated_at",
     ];
-    const REMOVED_INDEXES: &[&str] = &["idx_tasks_completed", "idx_tasks_due_date", "idx_tasks_project"];
+    const REMOVED_INDEXES: &[&str] = &[
+        "idx_tasks_completed",
+        "idx_tasks_due_date",
+        "idx_tasks_project",
+    ];
 
     fn index_names(conn: &Connection) -> Vec<String> {
         let mut stmt = conn
@@ -716,6 +807,7 @@ mod tests {
             project: project.into(),
             priority: Priority::Medium,
             due_date: due.map(Into::into),
+            scheduled_date: None,
             calendar_event_id: None,
         };
         // 3 open + 3 done, spread over 3 projects and several due dates.
@@ -764,7 +856,9 @@ mod tests {
              CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(completed);",
         )
         .unwrap();
-        assert!(index_names(&conn).iter().any(|n| n == "idx_tasks_completed"));
+        assert!(index_names(&conn)
+            .iter()
+            .any(|n| n == "idx_tasks_completed"));
 
         // `migrate` is what an existing DB runs on startup; it must clear the legacy indexes
         // without touching data or the tables.
@@ -849,6 +943,7 @@ mod tests {
                 project: format!("project-{:03}", i % projects),
                 priority: Priority::Medium,
                 due_date: Some(format!("2026-{:02}-{:02}", 1 + (i % 12), 1 + (i % 28))),
+                scheduled_date: None,
                 calendar_event_id: None,
             })
             .unwrap();
@@ -925,7 +1020,10 @@ mod tests {
         assert_eq!(projects.len(), 23, "expected 3 seed + 20 bulk projects");
         let mut sorted = projects.clone();
         sorted.sort_by_key(|p| p.to_lowercase());
-        assert_eq!(projects, sorted, "projects() must be case-insensitively sorted");
+        assert_eq!(
+            projects, sorted,
+            "projects() must be case-insensitively sorted"
+        );
     }
 
     #[test]

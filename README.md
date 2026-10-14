@@ -145,7 +145,11 @@ start of a date word (`bes…`, `fri…`, `jum…`) the dates with what they res
 a title earlier tasks — picking one fills in its project and priority too. **⇥** accepts the
 highlighted suggestion, **↑/↓** choose another (then **↵** accepts it), **Esc** hides the list.
 
-Shortcuts you can type anywhere in the text (they're removed from the title):
+Shortcuts you can type anywhere in the text (they're removed from the title). Every task can
+have two optional dates: the **do date** (the day you plan to work on it) and the **due date**
+(the deadline). A date on its own sets the do date; put **`due`**, **`deadline`**, **`dl`**,
+**`by`** or **`sebelum`** in front of it to set the due date — `besok due jumat` means *work on
+it tomorrow, due Friday*.
 
 | Type | Means |
 |---|---|
@@ -160,8 +164,8 @@ Shortcuts you can type anywhere in the text (they're removed from the title):
 | `in 3 days` `3 hari lagi` `dalam 3 hari` | Days from today |
 | `12/10` `12/10/2026` `2026-10-12` `25 des` `oct 20` | Exact date (day first; past dates roll to next year) |
 
-Example: `Bayar listrik #Personal !! 3 hari lagi` → *Bayar listrik*, project Personal, medium,
-due in 3 days. Without `#project` the task goes to the project you used last.
+Example: `Bayar listrik #Personal !! besok dl 3 hari lagi` → *Bayar listrik*, project Personal,
+medium, do tomorrow, due in 3 days. Without `#project` the task goes to the project you used last.
 
 **Change the hotkey:** menu bar → **Settings… → Quick Capture** → click the field and press
 a new combination (it warns about conflicts). **Reset to ⌥Space** restores the default. If
@@ -170,9 +174,10 @@ Raycast or Alfred already uses ⌥Space, pick something else here.
 ## Reminders
 
 **Daily summary** — every day at **08:00** a notification lists everything still open, each with
-when it's due: overdue (`overdue 2 days`), due today, due this week (`due Fri (in 3 days)`) and
-tasks **without a due date** (`no deadline`). Due dates are optional; undated tasks show up in the
-summary every day until you complete them.
+when to do it and when it's due: overdue (`overdue 2 days`), due today, planned for today
+(`do today · due Fri (in 3 days)`), coming up this week, and tasks **without any date**
+(`no deadline`). Both dates are optional; undated tasks show up in the summary every day until
+you complete them.
 
 **Repeats until done** — tasks that are **due today or overdue** are repeated every **hour**
 (after the summary) until **21:00**, and again the next day, until you mark them done. A
@@ -190,14 +195,19 @@ for TaskWidget, the same section links to System Settings.
 
 - **Sidebar** — *Today, Upcoming, Important, Someday, All Tasks, Completed*, **Calendar**,
   **Notes**, the last six **Weekly Reports**, and your **Projects**.
-- **Add** — the *Add a task…* bar at the top of each list; defaults follow the list (Today →
-  due today, Important → high priority, a project → that project).
+- **Two dates** — **Do on** (▶, the day you'll work on it) and **Due** (🏁, the deadline), both
+  optional. *Today* shows what's planned for today or earlier and what's due; *Upcoming* groups
+  tasks by their do day (or due day when there's no do date); *Someday* has tasks with neither.
+- **Add** — the *Add a task…* bar at the top of each list, with **Do** and **Due** chips;
+  defaults follow the list (Today → do today, Upcoming → do tomorrow, Important → high
+  priority, a project → that project).
 - **Edit** — click a task: the editor docks on the right (or opens as a sheet in a narrow
-  window). Change title, notes, project, priority, due date; **⌘S** saves, **Esc** closes.
-- **Quick edits** — right-click a task for priority, due date, project, done, or delete. Hover
-  shows calendar / edit / delete buttons.
-- **Calendar** — month grid with tasks per day; click a day to see and add its tasks; **drag a
-  task onto another day** to reschedule.
+  window). Change title, notes, project, priority, do date, due date; **⌘S** saves, **Esc** closes.
+- **Quick edits** — right-click a task for priority, do date, due date, project, done, or delete.
+  Hover shows calendar / edit / delete buttons.
+- **Calendar** — month grid with tasks on their do day (or due day); click a day to see and plan
+  tasks for it; **drag a task onto another day** to move its do date (or its due date when it has
+  no do date).
 - **Notes** — plain-text notes, newest first, grouped by Today / Yesterday / Previous 7 Days /
   Earlier. Write in the box at the top (**↵** saves, **⌥↵** new line; the first line is the
   title). Click a note to edit it in place (**Esc** cancels); hover or right-click to copy,

@@ -101,13 +101,17 @@ struct QuickAddDefaults {
     let project: String?
     let priority: Priority
     let due: Date?
+    /// Do date: Today / Upcoming plan the task for that day rather than setting a deadline.
+    var scheduled: Date? = nil
 }
 
 extension SidebarItem {
     func quickAddDefaults(now: Date = Date()) -> QuickAddDefaults {
         switch self {
-        case .smart(.today): return QuickAddDefaults(project: nil, priority: .medium, due: TaskDate.day(offset: 0, from: now))
-        case .smart(.upcoming): return QuickAddDefaults(project: nil, priority: .medium, due: TaskDate.day(offset: 1, from: now))
+        case .smart(.today):
+            return QuickAddDefaults(project: nil, priority: .medium, due: nil, scheduled: TaskDate.day(offset: 0, from: now))
+        case .smart(.upcoming):
+            return QuickAddDefaults(project: nil, priority: .medium, due: nil, scheduled: TaskDate.day(offset: 1, from: now))
         case .smart(.important): return QuickAddDefaults(project: nil, priority: .high, due: nil)
         case .project(let name): return QuickAddDefaults(project: name, priority: .medium, due: nil)
         default: return QuickAddDefaults(project: nil, priority: .medium, due: nil)
@@ -117,10 +121,10 @@ extension SidebarItem {
     /// Tasks belonging to this list (before search), used for sidebar counts.
     func matching(_ tasks: [Task], now: Date) -> [Task] {
         switch self {
-        case .smart(.today): return tasks.filter { !$0.completed && $0.isDueByToday(now) }
-        case .smart(.upcoming): return tasks.filter { !$0.completed && $0.dueDay != nil && !$0.isDueByToday(now) }
+        case .smart(.today): return tasks.filter { !$0.completed && $0.isPlannedByToday(now) }
+        case .smart(.upcoming): return tasks.filter { !$0.completed && $0.planDay != nil && !$0.isPlannedByToday(now) }
         case .smart(.important): return tasks.filter { !$0.completed && $0.priority == .high }
-        case .smart(.someday): return tasks.filter { !$0.completed && $0.dueDay == nil }
+        case .smart(.someday): return tasks.filter { !$0.completed && $0.planDay == nil }
         case .smart(.all): return tasks.filter { !$0.completed }
         case .smart(.completed): return tasks.filter(\.completed)
         case .project(let name): return tasks.filter { $0.project == name && !$0.completed }
@@ -182,7 +186,7 @@ extension SidebarItem {
 
     private static func byDay(_ tasks: [Task], now: Date) -> [TaskListSection] {
         let sorted = tasks.sorted(by: TaskSort.byDateThenPriority)
-        let days = sorted.compactMap(\.dueDay).reduce(into: [Date]()) { acc, d in
+        let days = sorted.compactMap(\.planDay).reduce(into: [Date]()) { acc, d in
             if acc.last != d { acc.append(d) }
         }
         let title = DateFormatter()
@@ -190,7 +194,7 @@ extension SidebarItem {
         return days.map { day in
             let label = day == TaskDate.day(offset: 1, from: now) ? "Tomorrow" : title.string(from: day)
             return TaskListSection(id: TaskDate.string(from: day), title: label, icon: "calendar",
-                                   accent: Palette.upcoming, tasks: sorted.filter { $0.dueDay == day })
+                                   accent: Palette.upcoming, tasks: sorted.filter { $0.planDay == day })
         }
     }
 }

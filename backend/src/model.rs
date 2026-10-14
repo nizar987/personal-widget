@@ -38,6 +38,9 @@ pub struct Task {
     pub project: String,
     pub priority: Priority,
     pub due_date: Option<String>,
+    /// Day you plan to work on it (`YYYY-MM-DD`), separate from the deadline.
+    #[serde(default)]
+    pub scheduled_date: Option<String>,
     pub calendar_event_id: Option<String>,
     pub completed: bool,
     pub created_at: String,
@@ -55,6 +58,7 @@ pub struct NewTask {
     pub project: String,
     pub priority: Priority,
     pub due_date: Option<String>,
+    pub scheduled_date: Option<String>,
     pub calendar_event_id: Option<String>,
 }
 
@@ -66,6 +70,7 @@ pub struct TaskChanges {
     pub project: Option<String>,
     pub priority: Option<Priority>,
     pub due_date: Option<Option<String>>,
+    pub scheduled_date: Option<Option<String>>,
     pub calendar_event_id: Option<Option<String>>,
     pub completed: Option<bool>,
 }
@@ -77,6 +82,7 @@ impl TaskChanges {
             && self.project.is_none()
             && self.priority.is_none()
             && self.due_date.is_none()
+            && self.scheduled_date.is_none()
             && self.calendar_event_id.is_none()
             && self.completed.is_none()
     }
@@ -90,6 +96,8 @@ pub struct TaskFilter {
     pub completed: Option<bool>,
     pub due_from: Option<String>,
     pub due_to: Option<String>,
+    /// Date bounds also match `scheduled_date` (either date in range).
+    pub include_scheduled: bool,
 }
 
 // MARK: - Notes

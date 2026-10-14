@@ -89,8 +89,11 @@ struct QuickCaptureView: View {
                          tint: draft.project == nil ? .secondary : Palette.project)
                     Chip(text: (draft.priority ?? .medium).displayName, icon: "flag.fill",
                          tint: draft.priority.map(Palette.color(for:)) ?? .secondary)
-                    Chip(text: dueText(draft.due), icon: "calendar",
-                         tint: draft.due == nil ? .secondary : Palette.upcoming)
+                    Chip(text: draft.scheduled.map { "Do \(dueText($0))" } ?? "Do: any day", icon: "play.circle",
+                         tint: draft.scheduled == nil ? .secondary : Palette.important)
+                    if let due = draft.due {
+                        Chip(text: "Due \(dueText(due))", icon: "flag.checkered", tint: Palette.upcoming)
+                    }
                 }
                 Spacer(minLength: 8)
                 keyHint(completing: effectiveMode == .task && !suggestions.isEmpty)
@@ -175,7 +178,7 @@ struct QuickCaptureView: View {
         HStack(spacing: 10) {
             hintToken("#project")
             hintToken("!high")
-            hintToken("besok · fri · 12/10")
+            hintToken("besok · due fri")
         }
     }
 

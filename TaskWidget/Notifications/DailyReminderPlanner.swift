@@ -72,9 +72,11 @@ struct DayAgenda: Equatable {
     let overdue: [Task]
     /// Due on `day`.
     let dueToday: [Task]
-    /// Due within the next week — listed so you know what's coming.
+    /// Not due yet, but planned (do date) for `day` or an earlier day.
+    let doToday: [Task]
+    /// Planned or due within the next week — listed so you know what's coming.
     let upcoming: [Task]
-    /// No due date: always listed until done, never repeated.
+    /// No do date and no due date: always listed until done, never repeated.
     let undated: [Task]
 
     init(tasks: [Task], day: Date, calendar: Calendar = .current) {
@@ -82,14 +84,19 @@ struct DayAgenda: Equatable {
         let weekOut = calendar.date(byAdding: .day, value: 7, to: day) ?? day
         overdue = open.filter { ($0.dueDay ?? .distantFuture) < day }.sorted(by: TaskSort.byDateThenPriority)
         dueToday = open.filter { $0.dueDay == day }.sorted(by: TaskSort.byPriority)
-        upcoming = open.filter { $0.dueDay.map { $0 > day && $0 <= weekOut } ?? false }
-            .sorted(by: TaskSort.byDateThenPriority)
-        undated = open.filter { $0.dueDay == nil }.sorted(by: TaskSort.byPriority)
+        let notDue = open.filter { ($0.dueDay ?? .distantFuture) > day }
+        doToday = notDue.filter { ($0.scheduledDay ?? .distantFuture) <= day }.sorted(by: TaskSort.byPriority)
+        upcoming = notDue.filter { task in
+            guard let plan = task.planDay else { return false }
+            return plan > day && plan <= weekOut
+        }
+        .sorted(by: TaskSort.byDateThenPriority)
+        undated = open.filter { $0.planDay == nil }.sorted(by: TaskSort.byPriority)
     }
 
     /// Due today or overdue: these get repeated reminders until they're done.
     var pressing: [Task] { overdue + dueToday }
-    var all: [Task] { overdue + dueToday + upcoming + undated }
+    var all: [Task] { overdue + dueToday + doToday + upcoming + undated }
     var isEmpty: Bool { all.isEmpty }
 }
 
@@ -181,6 +188,7 @@ enum DailyReminderPlanner {
         var counts: [String] = []
         if !agenda.overdue.isEmpty { counts.append("\(agenda.overdue.count) overdue") }
         if !agenda.dueToday.isEmpty { counts.append("\(agenda.dueToday.count) due today") }
+        if !agenda.doToday.isEmpty { counts.append("\(agenda.doToday.count) planned today") }
         if !agenda.upcoming.isEmpty { counts.append("\(agenda.upcoming.count) this week") }
         if !agenda.undated.isEmpty { counts.append("\(agenda.undated.count) no deadline") }
         return DailyReminder(
@@ -200,7 +208,7 @@ enum DailyReminderPlanner {
             return DailyReminder(
                 kind: .nag, dayKey: dayKey, fireDate: fire,
                 title: "\(dot(for: task)) \(task.title)",
-                subtitle: deadline(for: task, on: day, calendar: calendar).capitalizedFirst,
+                subtitle: timing(for: task, on: day, calendar: calendar).capitalizedFirst,
                 body: "\(task.priority.displayName) priority\(project) — repeats until it's done.",
                 taskID: task.id
             )
@@ -227,7 +235,29 @@ enum DailyReminderPlanner {
 
     static func line(for task: Task, day: Date, calendar: Calendar = .current) -> String {
         let project = task.project.isEmpty ? "" : " — \(task.project)"
-        return "\(dot(for: task)) \(task.title)\(project) · \(deadline(for: task, on: day, calendar: calendar))"
+        return "\(dot(for: task)) \(task.title)\(project) · \(timing(for: task, on: day, calendar: calendar))"
+    }
+
+    /// When to work on it and when it's due: "do today · due Fri (in 3 days)". Without a do
+    /// date it's just the deadline ("no deadline" when there's neither).
+    static func timing(for task: Task, on day: Date, calendar: Calendar = .current) -> String {
+        guard let planned = Self.plan(for: task, on: day, calendar: calendar) else {
+            return deadline(for: task, on: day, calendar: calendar)
+        }
+        return task.dueDay == nil ? planned : "\(planned) · \(deadline(for: task, on: day, calendar: calendar))"
+    }
+
+    /// "do today", "do today (planned Mon)", "do Wed (in 2 days)", "do 20 Oct"; nil when unplanned.
+    static func plan(for task: Task, on day: Date, calendar: Calendar = .current) -> String? {
+        guard let scheduled = task.scheduledDay else { return nil }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: day), to: scheduled).day ?? 0
+        switch days {
+        case 0: return "do today"
+        case 1: return "do tomorrow"
+        case 2...6: return "do \(weekday.string(from: scheduled)) (in \(days) days)"
+        case 7...: return "do \(shortDate.string(from: scheduled))"
+        default: return "do today (planned \(shortDate.string(from: scheduled)))"
+        }
     }
 
     /// Dots match the priority colours used in the app and widget.

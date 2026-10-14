@@ -20,7 +20,7 @@ struct CalendarView: View {
     }
 
     private var dayTasks: [Task] {
-        visibleTasks.filter { $0.dueDay == selectedDay }
+        visibleTasks.filter { $0.planDay == selectedDay }
             .sorted { ($0.completed ? 1 : 0, -$0.priority.rank) < ($1.completed ? 1 : 0, -$1.priority.rank) }
     }
 
@@ -104,11 +104,14 @@ struct CalendarView: View {
             tasks: visibleTasks,
             selectedDay: $selectedDay,
             onOpenTask: { task in
-                selectedDay = task.dueDay ?? selectedDay
+                selectedDay = task.planDay ?? selectedDay
                 withAnimation(AppStyle.spring) { selectedTaskID = task.id }
             },
             onReschedule: { task, day in
-                _Concurrency.Task { await store.update(task, TaskPatch(dueDate: .set(TaskDate.string(from: day)))) }
+                // Dragging moves the do date when the task has one, otherwise the due date.
+                let date = TaskPatch.DueDate.set(TaskDate.string(from: day))
+                let patch = task.scheduledDay != nil ? TaskPatch(scheduledDate: date) : TaskPatch(dueDate: date)
+                _Concurrency.Task { await store.update(task, patch) }
             }
         )
         .card(padding: 10)
@@ -130,9 +133,9 @@ struct CalendarView: View {
                     CountBadge(count: dayTasks.filter { !$0.completed }.count, accent: Palette.today)
                 }
             }
-            QuickAddBar(defaults: QuickAddDefaults(project: nil, priority: .medium, due: selectedDay),
-                        projects: store.projects, focus: quickAddFocus) { title, project, priority, due in
-                await store.create(title: title, project: project, priority: priority, due: due)
+            QuickAddBar(defaults: QuickAddDefaults(project: nil, priority: .medium, due: nil, scheduled: selectedDay),
+                        projects: store.projects, focus: quickAddFocus) { title, project, priority, due, scheduled in
+                await store.create(title: title, project: project, priority: priority, due: due, scheduled: scheduled)
             }
             if dayTasks.isEmpty {
                 VStack(spacing: 6) {

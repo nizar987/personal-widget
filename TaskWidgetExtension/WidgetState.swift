@@ -146,17 +146,17 @@ struct WidgetListModel {
 
         switch tab {
         case .today:
-            return open.filter { $0.isDueByToday(now) }.sorted(by: TaskSort.byDateThenPriority)
-                + doneToday.filter { ($0.dueDay ?? .distantFuture) <= today }
+            return open.filter { $0.isPlannedByToday(now) }.sorted(by: TaskSort.byDateThenPriority)
+                + doneToday.filter { ($0.planDay ?? .distantFuture) <= today }
         case .upcoming:
-            return open.filter { ($0.dueDay ?? .distantPast) > today }.sorted(by: TaskSort.byDateThenPriority)
+            return open.filter { ($0.planDay ?? .distantPast) > today }.sorted(by: TaskSort.byDateThenPriority)
         case .important:
             return open.filter { $0.priority == .high }.sorted(by: TaskSort.byDateThenPriority)
                 + doneToday.filter { $0.priority == .high }
         case .someday:
-            return open.filter { $0.dueDay == nil }.sorted(by: TaskSort.byPriority)
+            return open.filter { $0.planDay == nil }.sorted(by: TaskSort.byPriority)
         case .day(let date):
-            let onDay = tasks.filter { $0.dueDay == date }
+            let onDay = tasks.filter { $0.planDay == date }
             return onDay.filter { !$0.completed }.sorted(by: TaskSort.byPriority) + onDay.filter(\.completed)
         }
     }
@@ -176,6 +176,6 @@ struct DayProgress {
     init(tasks: [Task], now: Date) {
         let cal = Calendar.current
         done = tasks.filter { $0.completedDate.map { cal.isDate($0, inSameDayAs: now) } ?? false }.count
-        total = done + tasks.filter { !$0.completed && $0.isDueByToday(now) }.count
+        total = done + tasks.filter { !$0.completed && $0.isPlannedByToday(now) }.count
     }
 }

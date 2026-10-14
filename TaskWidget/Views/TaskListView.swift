@@ -21,8 +21,9 @@ struct TaskListView: View {
                 if store.isOffline { offlineBanner }
                 if item != .smart(.completed) {
                     QuickAddBar(defaults: item.quickAddDefaults(), projects: store.projects,
-                                focus: quickAddFocus) { title, project, priority, due in
-                        await store.create(title: title, project: project, priority: priority, due: due)
+                                focus: quickAddFocus) { title, project, priority, due, scheduled in
+                        await store.create(title: title, project: project, priority: priority,
+                                           due: due, scheduled: scheduled)
                     }
                 }
                 if sections.isEmpty {

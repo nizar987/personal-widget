@@ -13,6 +13,8 @@ struct Task: Identifiable, Codable, Hashable {
     var updatedAt: String
     /// UTC "YYYY-MM-DD HH:MM:SS" when marked done; nil while open.
     var completedAt: String? = nil
+    /// YYYY-MM-DD: the day you plan to work on it (separate from the due date).
+    var scheduledDate: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, project, priority
@@ -22,6 +24,7 @@ struct Task: Identifiable, Codable, Hashable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case completedAt = "completed_at"
+        case scheduledDate = "scheduled_date"
     }
 }
 
