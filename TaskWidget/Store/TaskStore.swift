@@ -49,19 +49,22 @@ final class TaskStore {
 
     @discardableResult
     func create(title: String, project: String, priority: Priority,
-                due: Date?, scheduled: Date? = nil, description: String? = nil) async -> Bool {
+                due: Date?, scheduled: Date? = nil, description: String? = nil,
+                status: TaskStatus? = nil) async -> Bool {
         let input = NewTaskInput(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             project: project.trimmingCharacters(in: .whitespacesAndNewlines),
             priority: priority,
             due_date: due.map(TaskDate.string(from:)),
             description: description,
-            scheduled_date: scheduled.map(TaskDate.string(from:))
+            scheduled_date: scheduled.map(TaskDate.string(from:)),
+            status: status
         )
         do {
             let created = try await api.createTask(input)
             withAnimation(springy) { tasks.insert(created, at: 0) }
             didMutate()
+            warnIfServerDropped(doDate: input.scheduled_date != nil, status: status == .inProgress, in: created)
             return true
         } catch {
             report(error)
@@ -73,6 +76,7 @@ final class TaskStore {
         var flipped = task
         flipped.completed.toggle()
         flipped.completedAt = flipped.completed ? TaskDate.timestampString(from: Date()) : nil
+        flipped.status = flipped.completed ? .done : .backlog
         replaceLocally(flipped)
         do {
             replaceLocally(try await api.toggleTask(id: task.id))
@@ -83,11 +87,21 @@ final class TaskStore {
         }
     }
 
+    /// Moves a task along backlog → in progress → done (or back).
+    func setStatus(_ task: Task, _ status: TaskStatus) async {
+        guard task.stage != status else { return }
+        await update(task, TaskPatch(status: status))
+    }
+
     func update(_ task: Task, _ patch: TaskPatch) async {
         replaceLocally(Self.apply(patch, to: task))
         do {
-            replaceLocally(try await api.updateTask(id: task.id, patch))
+            let saved = try await api.updateTask(id: task.id, patch)
+            replaceLocally(saved)
             didMutate()
+            var setsDoDate = false
+            if case .set = patch.scheduledDate { setsDoDate = true }
+            warnIfServerDropped(doDate: setsDoDate, status: patch.status == .inProgress, in: saved)
         } catch {
             replaceLocally(task)
             report(error)
@@ -123,6 +137,16 @@ final class TaskStore {
         }
     }
 
+    /// A server built before the do date / status existed silently ignores those fields.
+    private func warnIfServerDropped(doDate: Bool, status: Bool, in saved: Task) {
+        let droppedDoDate = doDate && saved.scheduledDate == nil
+        let droppedStatus = status && saved.status == nil
+        guard droppedDoDate || droppedStatus else { return }
+        errorMessage = "The TaskWidget server is out of date and didn't save the "
+            + (droppedDoDate ? "do date" : "status")
+            + ". Update it with backend/scripts/install-launch-agent.sh."
+    }
+
     private func didMutate() {
         WidgetCenter.shared.reloadAllTimelines()
     }
@@ -142,9 +166,23 @@ final class TaskStore {
             t.completed = v
             t.completedAt = v ? (t.completedAt ?? TaskDate.timestampString(from: Date())) : nil
         }
+        if let v = patch.status {
+            t.status = v
+            t.completed = v == .done
+            t.completedAt = v == .done ? (t.completedAt ?? TaskDate.timestampString(from: Date())) : nil
+        } else if patch.completed == false, t.status == .done {
+            t.status = .backlog
+        } else if patch.completed == true {
+            t.status = .done
+        }
         switch patch.dueDate {
         case .set(let day): t.dueDate = day
         case .clear: t.dueDate = nil
+        case nil: break
+        }
+        switch patch.scheduledDate {
+        case .set(let day): t.scheduledDate = day
+        case .clear: t.scheduledDate = nil
         case nil: break
         }
         return t

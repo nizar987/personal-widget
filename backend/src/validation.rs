@@ -3,7 +3,7 @@
 use chrono::NaiveDate;
 use serde_json::{Map, Value};
 
-use crate::model::{NewNote, NewTask, NoteChanges, Priority, TaskChanges};
+use crate::model::{NewNote, NewTask, NoteChanges, Priority, Status, TaskChanges};
 
 pub const MAX_TITLE: usize = 200;
 pub const MAX_DESCRIPTION: usize = 2000;
@@ -36,6 +36,7 @@ pub fn parse_new_task(body: &Value) -> Result<NewTask> {
     let due_date = nullable_due_date(obj)?.flatten();
     let scheduled_date = nullable_scheduled_date(obj)?.flatten();
     let calendar_event_id = nullable_string(obj, "calendar_event_id").flatten();
+    let status = optional_status(obj)?.unwrap_or_default();
 
     Ok(NewTask {
         title,
@@ -45,6 +46,7 @@ pub fn parse_new_task(body: &Value) -> Result<NewTask> {
         due_date,
         scheduled_date,
         calendar_event_id,
+        status,
     })
 }
 
@@ -86,7 +88,20 @@ pub fn parse_changes(body: &Value) -> Result<TaskChanges> {
                 .ok_or(ValidationError("invalid_completed"))?,
         );
     }
+    changes.status = optional_status(obj)?;
     Ok(changes)
+}
+
+/// Missing or null → `None`; anything but `backlog` / `in_progress` / `done` is rejected.
+fn optional_status(obj: &Map<String, Value>) -> Result<Option<Status>> {
+    match obj.get("status") {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => value
+            .as_str()
+            .and_then(Status::parse)
+            .map(Some)
+            .ok_or(ValidationError("invalid_status")),
+    }
 }
 
 /// Accepts strictly `YYYY-MM-DD` that is also a real calendar date.
@@ -262,6 +277,20 @@ mod tests {
                 .due_date,
             Some(Some("2026-10-12".into()))
         );
+    }
+
+    #[test]
+    fn status_defaults_to_backlog_and_rejects_unknown_values() {
+        let base = json!({"title": "t", "project": "p", "priority": "low"});
+        assert_eq!(parse_new_task(&base).unwrap().status, Status::Backlog);
+        let started =
+            json!({"title": "t", "project": "p", "priority": "low", "status": "in_progress"});
+        assert_eq!(parse_new_task(&started).unwrap().status, Status::InProgress);
+        assert_eq!(
+            parse_changes(&json!({"status": "doing"})).unwrap_err().0,
+            "invalid_status"
+        );
+        assert_eq!(parse_changes(&json!({})).unwrap().status, None);
     }
 
     #[test]

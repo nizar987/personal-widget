@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Reminders stay on screen with their Understood button until you act on them.
+	     Applies to new installs; existing ones: System Settings → Notifications → TaskWidget → Alerts. -->
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
 	<!-- taskwidget:// links opened from the desktop widget (see Shared/AppLinks.swift). -->
 	<key>CFBundleURLTypes</key>
 	<array>

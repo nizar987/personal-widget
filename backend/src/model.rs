@@ -29,6 +29,39 @@ impl Priority {
     }
 }
 
+/// Workflow stage: backlog → in progress → done. `done` is the same thing as `completed`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Status {
+    #[default]
+    Backlog,
+    InProgress,
+    Done,
+}
+
+impl Status {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "backlog" => Some(Self::Backlog),
+            "in_progress" => Some(Self::InProgress),
+            "done" => Some(Self::Done),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Backlog => "backlog",
+            Self::InProgress => "in_progress",
+            Self::Done => "done",
+        }
+    }
+
+    pub fn is_done(self) -> bool {
+        self == Self::Done
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Task {
     pub id: i64,
@@ -43,6 +76,9 @@ pub struct Task {
     pub scheduled_date: Option<String>,
     pub calendar_event_id: Option<String>,
     pub completed: bool,
+    /// Always `done` when `completed` is true. Older servers don't send it.
+    #[serde(default)]
+    pub status: Status,
     pub created_at: String,
     pub updated_at: String,
     /// UTC `YYYY-MM-DD HH:MM:SS` when the task was last marked done; `None` while open.
@@ -60,6 +96,7 @@ pub struct NewTask {
     pub due_date: Option<String>,
     pub scheduled_date: Option<String>,
     pub calendar_event_id: Option<String>,
+    pub status: Status,
 }
 
 /// Validated partial update. Outer `None` = leave unchanged; `Some(None)` = set NULL.
@@ -73,6 +110,8 @@ pub struct TaskChanges {
     pub scheduled_date: Option<Option<String>>,
     pub calendar_event_id: Option<Option<String>>,
     pub completed: Option<bool>,
+    /// Wins over `completed` when both are given.
+    pub status: Option<Status>,
 }
 
 impl TaskChanges {
@@ -85,6 +124,7 @@ impl TaskChanges {
             && self.scheduled_date.is_none()
             && self.calendar_event_id.is_none()
             && self.completed.is_none()
+            && self.status.is_none()
     }
 }
 
@@ -94,6 +134,7 @@ pub struct TaskFilter {
     pub project: Option<String>,
     pub priority: Option<Priority>,
     pub completed: Option<bool>,
+    pub status: Option<Status>,
     pub due_from: Option<String>,
     pub due_to: Option<String>,
     /// Date bounds also match `scheduled_date` (either date in range).

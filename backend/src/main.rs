@@ -2,13 +2,14 @@ use std::process::ExitCode;
 
 use taskwidget_server::config::Config;
 use taskwidget_server::repo::{NoteRepo, TaskRepo};
-use taskwidget_server::{api, import};
+use taskwidget_server::{api, import, mcp};
 use tracing_subscriber::EnvFilter;
 
 const USAGE: &str = "\
 Usage:
   taskwidget-server [serve]            Start the API on 127.0.0.1:$TASKWIDGET_PORT (default 3220)
   taskwidget-server import <base-url>  Copy tasks from another server, e.g. http://localhost:3210
+  taskwidget-server mcp                MCP server on stdio, so AI assistants can create tasks from chat
 
 Environment:
   TASKWIDGET_PORT  Port to listen on (default 3220)
@@ -21,6 +22,8 @@ async fn main() -> ExitCode {
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
+        // stdout carries the MCP protocol; the LaunchAgent sends both streams to one log.
+        .with_writer(std::io::stderr)
         .init();
 
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -32,6 +35,7 @@ async fn main() -> ExitCode {
     {
         [] | ["serve"] => serve().await,
         ["import", url] => run_import(url),
+        ["mcp"] => run_mcp(),
         ["-h" | "--help" | "help"] => {
             println!("{USAGE}");
             Ok(())
@@ -88,6 +92,12 @@ fn run_import(url: &str) -> Result<(), String> {
         "import finished"
     );
     Ok(())
+}
+
+fn run_mcp() -> Result<(), String> {
+    let (config, repo) = open_repo()?;
+    tracing::info!(db = %config.db_path.display(), "taskwidget MCP server on stdio");
+    mcp::serve_stdio(&repo).map_err(|e| format!("mcp stdio error: {e}"))
 }
 
 async fn shutdown_signal() {

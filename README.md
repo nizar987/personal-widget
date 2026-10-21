@@ -7,7 +7,9 @@ reports and a global quick-capture hotkey. Data lives in a small local Rust serv
 - **Quick capture** — press **⌥Space** anywhere, type `Fix bug #wms !high besok`, press ↵
 - **Desktop widget** — small / medium / large: check off, snooze, switch lists, page through, add
 - **App window** — smart lists, projects, editor, search, calendar, weekly reports
-- **Reminders** — a daily summary of everything open (with deadlines, including tasks without a due date); due and overdue tasks repeat until done
+- **Status** — every task moves **Backlog → In Progress → Done**
+- **Reminders** — a daily summary of everything open (backlog and in progress, with deadlines, including tasks without a due date); due and overdue tasks repeat until done or you press **Understood**
+- **AI assistants** — Claude (Desktop / Code) and other MCP clients can create and update tasks straight from a chat
 - **Menu bar** — today's tasks, new task, open window; the Dock icon only shows while the window is open
 
 ## Requirements
@@ -179,10 +181,19 @@ when to do it and when it's due: overdue (`overdue 2 days`), due today, planned 
 (`no deadline`). Both dates are optional; undated tasks show up in the summary every day until
 you complete them.
 
+Only **Backlog** and **In Progress** tasks remind you (in-progress ones are marked ▶︎); done tasks
+never do.
+
 **Repeats until done** — tasks that are **due today or overdue** are repeated every **hour**
-(after the summary) until **21:00**, and again the next day, until you mark them done. A
-reminder about a single task has **Mark as Done**; every reminder has **Snooze 1 Hour**.
-Completing the tasks clears the remaining repeats and removes the ones on screen.
+(after the summary) until **21:00**, and again the next day, until you mark them done. Every
+reminder has **Understood** — it stops the repeats for those tasks **for the rest of the day**
+and clears today's reminders from the screen (they come back tomorrow if still open). Closing
+a reminder counts as Understood too. A reminder about a single task also has **Mark as Done**,
+and every reminder has **Snooze 1 Hour**. Completing the tasks clears the remaining repeats.
+
+To keep reminders on screen with their buttons visible, set **System Settings → Notifications →
+TaskWidget** to **Alerts** (new installs default to it). With **Banners** the buttons only show
+when you hover over the notification.
 
 If the app wasn't running at summary time (Mac off, logged in late), the summary is sent as soon
 as it starts, once per day.
@@ -193,17 +204,21 @@ for TaskWidget, the same section links to System Settings.
 
 ## Using the app
 
-- **Sidebar** — *Today, Upcoming, Important, Someday, All Tasks, Completed*, **Calendar**,
+- **Sidebar** — *Today, In Progress, Upcoming, Important, Someday, All Tasks, Completed*, **Calendar**,
   **Notes**, the last six **Weekly Reports**, and your **Projects**.
 - **Two dates** — **Do on** (▶, the day you'll work on it) and **Due** (🏁, the deadline), both
   optional. *Today* shows what's planned for today or earlier and what's due; *Upcoming* groups
   tasks by their do day (or due day when there's no do date); *Someday* has tasks with neither.
+- **Status** — **Backlog → In Progress → Done**. New tasks start in the backlog (in the *In
+  Progress* list they start in progress). Click the status chip on a task, hover and press ▶ to
+  start it, right-click → *Status*, or use the *Status* picker in the editor. Ticking the circle
+  marks it done; un-ticking puts it back in the backlog.
 - **Add** — the *Add a task…* bar at the top of each list, with **Do** and **Due** chips;
   defaults follow the list (Today → do today, Upcoming → do tomorrow, Important → high
   priority, a project → that project).
 - **Edit** — click a task: the editor docks on the right (or opens as a sheet in a narrow
-  window). Change title, notes, project, priority, do date, due date; **⌘S** saves, **Esc** closes.
-- **Quick edits** — right-click a task for priority, do date, due date, project, done, or delete.
+  window). Change title, notes, project, priority, status, do date, due date; **⌘S** saves, **Esc** closes.
+- **Quick edits** — right-click a task for status, priority, do date, due date, project, done, or delete.
   Hover shows calendar / edit / delete buttons.
 - **Calendar** — month grid with tasks on their do day (or due day); click a day to see and plan
   tasks for it; **drag a task onto another day** to move its do date (or its due date when it has
@@ -219,11 +234,38 @@ for TaskWidget, the same section links to System Settings.
 
 Every change refreshes the desktop widget immediately.
 
+## AI assistants (MCP)
+
+Let Claude — or any [MCP](https://modelcontextprotocol.io) client — create tasks from a chat, so
+you don't have to type them in yourself. Say *"plan my product launch next week and put the
+steps in TaskWidget"* or *"remind me to send the invoice tomorrow, due Friday"*, and the
+assistant adds them with project, priority, do date, due date and status.
+
+```bash
+./backend/scripts/install-launch-agent.sh   # if you haven't yet: installs the server binary
+./backend/scripts/install-mcp.sh            # connects Claude Desktop and/or Claude Code
+```
+
+Restart Claude Desktop afterwards. The assistant gets these tools:
+
+| Tool | What it does |
+|---|---|
+| `create_task` | One task: `title` (required), `project` (default *Inbox*), `priority`, `description`, `do_date`, `due_date`, `status` |
+| `create_tasks` | Up to 50 tasks at once, e.g. the steps of a plan (all validated before any is saved) |
+| `list_tasks` | Open tasks by default; filter by `status`, `project`, `view` (`today` / `week`) |
+| `update_task` | Move along backlog → in progress → done, reschedule, rename, re-prioritise |
+| `list_projects` | Existing project names, so new tasks land in the right one |
+
+New tasks appear in the app and the widget immediately. Other MCP clients (Cursor, LM Studio, …):
+add a stdio server with command `~/Library/Application Support/TaskWidget/bin/taskwidget-server`
+and args `["mcp"]`. ChatGPT only connects to remote (internet-reachable) MCP servers, so it can't
+use this local one.
+
 ## After pulling new code
 
 | Changed | Do this |
 |---|---|
-| `backend/` | `./backend/scripts/install-launch-agent.sh` (rebuilds and restarts the server; database migrations run automatically) |
+| `backend/` | `./backend/scripts/install-launch-agent.sh` (rebuilds and restarts the server; database migrations run automatically). **Skipping this is why a new field doesn't save** — e.g. the do date: an old server ignores it, and the app shows "server is out of date" |
 | App or widget | Quit TaskWidget (menu bar → Quit), rebuild (step 5), replace the copy in /Applications, open it again |
 | Widget still shows old content | `pkill -f TaskWidgetExtension` — macOS restarts the widget with the new build |
 

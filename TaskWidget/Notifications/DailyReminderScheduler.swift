@@ -16,9 +16,11 @@ final class DailyReminderScheduler: NSObject {
     static let categoryID = "taskwidget.daily"
     /// Reminders about exactly one task also offer "Mark as Done".
     static let singleTaskCategoryID = "taskwidget.daily.single"
+    static let understoodActionID = "taskwidget.daily.understood"
     static let snoozeActionID = "taskwidget.daily.snooze"
     static let doneActionID = "taskwidget.daily.done"
     private static let snoozeKey = "reminder.snoozedUntil"
+    private static let acknowledgedKey = "reminder.acknowledged"
     private static let summaryDaysKey = "reminder.summaryDays"
     private static let testIdentifierPrefix = "taskwidget.test."
     private static let snoozeDuration: TimeInterval = 60 * 60
@@ -37,13 +39,16 @@ final class DailyReminderScheduler: NSObject {
     func configure() {
         DailyReminderSettings.registerDefaults()
         center.delegate = self
+        let understood = UNNotificationAction(identifier: Self.understoodActionID, title: "Understood", options: [])
         let snooze = UNNotificationAction(identifier: Self.snoozeActionID, title: "Snooze 1 Hour", options: [])
         let done = UNNotificationAction(identifier: Self.doneActionID, title: "Mark as Done", options: [])
+        // Understood comes first so it's the button macOS shows; closing the notification
+        // (customDismissAction) counts as Understood too.
         center.setNotificationCategories([
-            UNNotificationCategory(identifier: Self.categoryID, actions: [snooze], intentIdentifiers: [],
-                                   options: []),
-            UNNotificationCategory(identifier: Self.singleTaskCategoryID, actions: [done, snooze],
-                                   intentIdentifiers: [], options: []),
+            UNNotificationCategory(identifier: Self.categoryID, actions: [understood, snooze],
+                                   intentIdentifiers: [], options: [.customDismissAction]),
+            UNNotificationCategory(identifier: Self.singleTaskCategoryID, actions: [understood, done, snooze],
+                                   intentIdentifiers: [], options: [.customDismissAction]),
         ])
         NotificationCenter.default.addObserver(self, selector: #selector(dayChanged),
                                                name: .NSCalendarDayChanged, object: nil)
@@ -91,7 +96,8 @@ final class DailyReminderScheduler: NSObject {
         let today = TaskDate.string(from: now)
         let summaryDays = self.summaryDays()
         let reminders = DailyReminderPlanner.plan(tasks: tasks, settings: settings, snoozedUntil: snoozedUntil(),
-                                                  summaryDeliveredToday: summaryDays.contains(today), now: now)
+                                                  summaryDeliveredToday: summaryDays.contains(today),
+                                                  acknowledged: acknowledged(now: now), now: now)
 
         let pending = await center.pendingNotificationRequests()
             .map(\.identifier).filter { $0.hasPrefix(DailyReminderPlanner.identifierPrefix) }
@@ -128,7 +134,7 @@ final class DailyReminderScheduler: NSObject {
         content.sound = .default
         content.categoryIdentifier = reminder.taskID == nil ? Self.categoryID : Self.singleTaskCategoryID
         content.threadIdentifier = "\(Self.categoryID).\(reminder.dayKey)"
-        var info: [String: Any] = ["day": reminder.dayKey]
+        var info: [String: Any] = ["day": reminder.dayKey, "acknowledgeIDs": reminder.acknowledgeIDs]
         if let id = reminder.taskID { info["taskID"] = id }
         content.userInfo = info
         // Catch-up summaries are due now: deliver immediately.
@@ -202,6 +208,27 @@ final class DailyReminderScheduler: NSObject {
         scheduleRefresh()
     }
 
+    // MARK: - Understood
+
+    /// Task ids per day whose repeats were acknowledged; older days are dropped.
+    private func acknowledged(now: Date) -> [String: Set<Int>] {
+        let stored = UserDefaults.standard.dictionary(forKey: Self.acknowledgedKey) as? [String: [Int]] ?? [:]
+        let today = TaskDate.string(from: now)
+        return stored.filter { $0.key >= today }.mapValues(Set.init)
+    }
+
+    /// "Understood" (or closing the notification): stop repeating these tasks today and clear
+    /// today's reminders already on screen. Tasks still open remind again tomorrow.
+    private func acknowledge(day: String, taskIDs: [Int]) async {
+        guard !taskIDs.isEmpty, day != "test" else { return }
+        let current = acknowledged(now: Date())
+        let updated = current.merging([day: Set(taskIDs)]) { $0.union($1) }
+        UserDefaults.standard.set(updated.mapValues { Array($0).sorted() }, forKey: Self.acknowledgedKey)
+        reminderLog.info("understood: \(taskIDs.count) tasks on \(day, privacy: .public)")
+        await removeDelivered(forDay: day)
+        scheduleRefresh()
+    }
+
     // MARK: - Summary bookkeeping
 
     /// Days whose summary has been scheduled (or sent as a catch-up). Lets a summary missed
@@ -239,12 +266,17 @@ extension DailyReminderScheduler: UNUserNotificationCenterDelegate {
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             didReceive response: UNNotificationResponse) async {
-        let taskID = response.notification.request.content.userInfo["taskID"] as? Int
-        await handle(action: response.actionIdentifier, taskID: taskID)
+        let info = response.notification.request.content.userInfo
+        let taskID = info["taskID"] as? Int
+        let day = info["day"] as? String ?? ""
+        let acknowledgeIDs = info["acknowledgeIDs"] as? [Int] ?? []
+        await handle(action: response.actionIdentifier, taskID: taskID, day: day, acknowledgeIDs: acknowledgeIDs)
     }
 
-    private func handle(action: String, taskID: Int?) async {
+    private func handle(action: String, taskID: Int?, day: String, acknowledgeIDs: [Int]) async {
         switch action {
+        case Self.understoodActionID, UNNotificationDismissActionIdentifier:
+            await acknowledge(day: day, taskIDs: acknowledgeIDs)
         case Self.snoozeActionID:
             snooze()
         case Self.doneActionID:

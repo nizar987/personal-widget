@@ -13,6 +13,7 @@ struct CalendarView: View {
 
     /// Side-by-side above this width, stacked below it.
     private let sideBySideWidth: CGFloat = 860
+    private let dayPanelWidth: CGFloat = 320
 
     private var visibleTasks: [Task] {
         let query = search.trimmingCharacters(in: .whitespaces)
@@ -32,7 +33,7 @@ struct CalendarView: View {
                     if geo.size.width >= sideBySideWidth {
                         HStack(alignment: .top, spacing: 16) {
                             grid
-                            dayPanel.frame(width: 300)
+                            dayPanel.frame(width: dayPanelWidth)
                         }
                     } else {
                         grid
@@ -166,6 +167,7 @@ struct CalendarView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .card(padding: 6)
             }
         }

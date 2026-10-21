@@ -80,7 +80,8 @@ struct DayAgenda: Equatable {
     let undated: [Task]
 
     init(tasks: [Task], day: Date, calendar: Calendar = .current) {
-        let open = tasks.filter { !$0.completed }
+        // Backlog and in-progress tasks; done ones never remind.
+        let open = tasks.filter { $0.stage != .done }
         let weekOut = calendar.date(byAdding: .day, value: 7, to: day) ?? day
         overdue = open.filter { ($0.dueDay ?? .distantFuture) < day }.sorted(by: TaskSort.byDateThenPriority)
         dueToday = open.filter { $0.dueDay == day }.sorted(by: TaskSort.byPriority)
@@ -118,6 +119,8 @@ struct DailyReminder: Equatable {
     let body: String
     /// Set when the reminder is about exactly one task, so it can offer "Mark as Done".
     let taskID: Int?
+    /// Tasks whose repeats stop for the day when "Understood" is pressed.
+    var acknowledgeIDs: [Int] = []
 
     var identifier: String {
         "\(DailyReminderPlanner.identifierPrefix)\(dayKey).\(kind.rawValue).\(Int(fireDate.timeIntervalSince1970))"
@@ -144,8 +147,10 @@ enum DailyReminderPlanner {
     ///   - snoozedUntil: repeats before this moment are skipped.
     ///   - summaryDeliveredToday: false when today's summary time passed without one being
     ///     scheduled (the app wasn't running yet); a catch-up summary is then sent right away.
+    ///   - acknowledged: task ids per `YYYY-MM-DD` the user pressed "Understood" for; they
+    ///     don't repeat again that day (they still do the next day while open).
     static func plan(tasks: [Task], settings: DailyReminderSettings, snoozedUntil: Date? = nil,
-                     summaryDeliveredToday: Bool = true,
+                     summaryDeliveredToday: Bool = true, acknowledged: [String: Set<Int>] = [:],
                      now: Date = Date(), calendar: Calendar = .current) -> [DailyReminder] {
         guard settings.isEnabled else { return [] }
         let today = calendar.startOfDay(for: now)
@@ -166,12 +171,15 @@ enum DailyReminderPlanner {
                 summaries.append(summary(agenda, dayKey: dayKey, day: day, at: now, calendar: calendar))
             }
 
-            guard offset < repeatDays, !agenda.pressing.isEmpty, settings.hasRepeatWindow else { continue }
+            let seen = acknowledged[dayKey] ?? []
+            let nagAgenda = seen.isEmpty ? agenda
+                : DayAgenda(tasks: tasks.filter { !seen.contains($0.id) }, day: day, calendar: calendar)
+            guard offset < repeatDays, !nagAgenda.pressing.isEmpty, settings.hasRepeatWindow else { continue }
             let step = TimeInterval(settings.repeatInterval * 60)
             var fire = start.addingTimeInterval(step)
             while fire <= end {
                 if fire > now && snoozedUntil.map({ fire >= $0 }) ?? true {
-                    nags.append(nag(agenda, dayKey: dayKey, day: day, at: fire, calendar: calendar))
+                    nags.append(nag(nagAgenda, dayKey: dayKey, day: day, at: fire, calendar: calendar))
                 }
                 fire.addTimeInterval(step)
             }
@@ -196,7 +204,8 @@ enum DailyReminderPlanner {
             title: "Today: \(count) \(count == 1 ? "task" : "tasks") to do",
             subtitle: counts.joined(separator: " · "),
             body: lines(agenda.all, day: day, calendar: calendar),
-            taskID: agenda.all.count == 1 ? agenda.all.first?.id : nil
+            taskID: agenda.all.count == 1 ? agenda.all.first?.id : nil,
+            acknowledgeIDs: agenda.pressing.map(\.id)
         )
     }
 
@@ -209,8 +218,10 @@ enum DailyReminderPlanner {
                 kind: .nag, dayKey: dayKey, fireDate: fire,
                 title: "\(dot(for: task)) \(task.title)",
                 subtitle: timing(for: task, on: day, calendar: calendar).capitalizedFirst,
-                body: "\(task.priority.displayName) priority\(project) — repeats until it's done.",
-                taskID: task.id
+                body: "\(task.stage.displayName) · \(task.priority.displayName) priority\(project)"
+                    + " — repeats until it's done or you press Understood.",
+                taskID: task.id,
+                acknowledgeIDs: [task.id]
             )
         }
         let title: String
@@ -221,8 +232,9 @@ enum DailyReminderPlanner {
         }
         return DailyReminder(
             kind: .nag, dayKey: dayKey, fireDate: fire, title: title,
-            subtitle: "Repeats until they're done",
-            body: lines(pressing, day: day, calendar: calendar), taskID: nil
+            subtitle: "Repeats until they're done or you press Understood",
+            body: lines(pressing, day: day, calendar: calendar), taskID: nil,
+            acknowledgeIDs: pressing.map(\.id)
         )
     }
 
@@ -235,7 +247,8 @@ enum DailyReminderPlanner {
 
     static func line(for task: Task, day: Date, calendar: Calendar = .current) -> String {
         let project = task.project.isEmpty ? "" : " — \(task.project)"
-        return "\(dot(for: task)) \(task.title)\(project) · \(timing(for: task, on: day, calendar: calendar))"
+        let started = task.stage == .inProgress ? "▶︎ " : ""
+        return "\(dot(for: task)) \(started)\(task.title)\(project) · \(timing(for: task, on: day, calendar: calendar))"
     }
 
     /// When to work on it and when it's due: "do today · due Fri (in 3 days)". Without a do

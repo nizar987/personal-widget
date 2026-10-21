@@ -1,5 +1,6 @@
 import AppKit
 import KeyboardShortcuts
+import notify
 import OSLog
 import WidgetKit
 
@@ -17,6 +18,10 @@ extension Notification.Name {
     /// Same routes as `taskwidget://` URLs; `object` is the URL string. Handy for scripts and tests.
     static let linkRequest = Notification.Name("com.multiagent.taskwidget.link")
 }
+
+/// Darwin notification posted by `taskwidget-server mcp` after an AI assistant changes tasks
+/// (see backend/src/notify.rs).
+private let externalTasksChanged = "com.multiagent.taskwidget.tasksChanged"
 
 enum WindowID {
     static let main = "main"
@@ -52,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let router = AppRouter()
     private(set) lazy var quickCapture = QuickCaptureController(store: store, noteStore: noteStore)
     private var refreshTimer: Timer?
+    private var externalChangeToken: Int32 = NOTIFY_TOKEN_INVALID
     private static let refreshInterval: TimeInterval = 5 * 60
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -109,6 +115,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshInBackground() }
+        }
+        // Tasks an AI assistant adds over MCP show up (and reach the widget) right away.
+        let status = notify_register_dispatch(externalTasksChanged, &externalChangeToken, .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refreshInBackground()
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        }
+        if status != NOTIFY_STATUS_OK {
+            quickCaptureLog.error("couldn't observe external task changes: \(status)")
         }
     }
 

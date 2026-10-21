@@ -54,7 +54,8 @@ struct TaskRowView: View {
     }
 
     private var meta: some View {
-        HStack(spacing: 6) {
+        FlowLayout(spacing: 6, lineSpacing: 4) {
+            if !task.completed { statusMenu }
             if let doText = DoLabel.text(for: task, now: Date()) {
                 Chip(text: doText, icon: "play.circle", tint: task.completed ? .secondary : DoLabel.color(for: task, now: Date()))
                     .help("Do date")
@@ -72,8 +73,26 @@ struct TaskRowView: View {
         }
     }
 
+    /// Backlog / In Progress chip; click to move the task along.
+    private var statusMenu: some View {
+        Menu {
+            StatusChoices(task: task, onUpdate: onUpdate)
+        } label: {
+            Chip(text: task.stage.displayName, icon: task.stage.icon, tint: Palette.color(for: task.stage))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Status: Backlog → In Progress → Done")
+    }
+
     private var hoverActions: some View {
         HStack(spacing: 2) {
+            if task.stage == .backlog {
+                iconButton("play.fill", help: "Start — move to In Progress", tint: Palette.color(for: .inProgress)) {
+                    onUpdate(TaskPatch(status: .inProgress))
+                }
+            }
             Menu {
                 DateChoiceMenus(onUpdate: onUpdate)
             } label: {
@@ -116,6 +135,7 @@ struct TaskContextMenu: View {
         Button(task.completed ? "Mark as Not Done" : "Mark as Done", systemImage: "checkmark.circle", action: onToggle)
         Button("Edit…", systemImage: "pencil", action: onEdit)
         Divider()
+        Menu("Status") { StatusChoices(task: task, onUpdate: onUpdate) }
         Menu("Priority") {
             ForEach(Priority.allCases.reversed()) { p in
                 Button { onUpdate(TaskPatch(priority: p)) } label: {
@@ -132,6 +152,21 @@ struct TaskContextMenu: View {
         .disabled(projects.count < 2)
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
+    }
+}
+
+/// Backlog / In Progress / Done, with the current one checked.
+struct StatusChoices: View {
+    let task: Task
+    let onUpdate: (TaskPatch) -> Void
+
+    var body: some View {
+        ForEach(TaskStatus.allCases) { status in
+            Button { onUpdate(TaskPatch(status: status)) } label: {
+                Label(status.displayName, systemImage: status == task.stage ? "checkmark" : status.icon)
+            }
+            .disabled(status == task.stage)
+        }
     }
 }
 

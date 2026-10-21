@@ -2,13 +2,14 @@ import SwiftUI
 
 /// Built-in lists shown at the top of the sidebar.
 enum SmartList: String, CaseIterable, Identifiable {
-    case today, upcoming, important, someday, all, completed
+    case today, inProgress, upcoming, important, someday, all, completed
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .today: return "Today"
+        case .inProgress: return "In Progress"
         case .upcoming: return "Upcoming"
         case .important: return "Important"
         case .someday: return "Someday"
@@ -20,6 +21,7 @@ enum SmartList: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .today: return "flame.fill"
+        case .inProgress: return TaskStatus.inProgress.icon
         case .upcoming: return "bolt.fill"
         case .important: return "star.fill"
         case .someday: return "tray.fill"
@@ -31,6 +33,7 @@ enum SmartList: String, CaseIterable, Identifiable {
     var accent: Color {
         switch self {
         case .today: return Palette.today
+        case .inProgress: return Palette.color(for: .inProgress)
         case .upcoming: return Palette.upcoming
         case .important: return Palette.important
         case .someday: return .gray
@@ -103,6 +106,8 @@ struct QuickAddDefaults {
     let due: Date?
     /// Do date: Today / Upcoming plan the task for that day rather than setting a deadline.
     var scheduled: Date? = nil
+    /// The In Progress list starts new tasks in progress; everywhere else they go to the backlog.
+    var status: TaskStatus? = nil
 }
 
 extension SidebarItem {
@@ -112,6 +117,7 @@ extension SidebarItem {
             return QuickAddDefaults(project: nil, priority: .medium, due: nil, scheduled: TaskDate.day(offset: 0, from: now))
         case .smart(.upcoming):
             return QuickAddDefaults(project: nil, priority: .medium, due: nil, scheduled: TaskDate.day(offset: 1, from: now))
+        case .smart(.inProgress): return QuickAddDefaults(project: nil, priority: .medium, due: nil, status: .inProgress)
         case .smart(.important): return QuickAddDefaults(project: nil, priority: .high, due: nil)
         case .project(let name): return QuickAddDefaults(project: name, priority: .medium, due: nil)
         default: return QuickAddDefaults(project: nil, priority: .medium, due: nil)
@@ -122,6 +128,7 @@ extension SidebarItem {
     func matching(_ tasks: [Task], now: Date) -> [Task] {
         switch self {
         case .smart(.today): return tasks.filter { !$0.completed && $0.isPlannedByToday(now) }
+        case .smart(.inProgress): return tasks.filter { $0.stage == .inProgress }
         case .smart(.upcoming): return tasks.filter { !$0.completed && $0.planDay != nil && !$0.isPlannedByToday(now) }
         case .smart(.important): return tasks.filter { !$0.completed && $0.priority == .high }
         case .smart(.someday): return tasks.filter { !$0.completed && $0.planDay == nil }
@@ -149,7 +156,7 @@ extension SidebarItem {
             return Self.byDay(matching(source, now: now), now: now)
         case .smart(.completed):
             return Self.compact([section("done", "Completed", "checkmark.circle.fill", Palette.done, matching(source, now: now))])
-        case .smart(.important), .smart(.someday):
+        case .smart(.inProgress), .smart(.important), .smart(.someday):
             let items = matching(source, now: now).sorted(by: TaskSort.byDateThenPriority)
             return Self.compact([section(title, title, icon, accent, items)])
         case .smart(.all):
