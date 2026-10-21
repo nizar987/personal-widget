@@ -10,7 +10,7 @@ use chrono::{Days, Local};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::model::{Priority, TaskFilter};
+use crate::model::{Priority, Status, TaskFilter};
 use crate::repo::{NoteRepo, RepoError, RepoResult, TaskRepo};
 use crate::validation::{self, ValidationError};
 
@@ -123,6 +123,7 @@ struct ListQuery {
     project: Option<String>,
     priority: Option<String>,
     completed: Option<String>,
+    status: Option<String>,
     from: Option<String>,
     to: Option<String>,
 }
@@ -155,6 +156,10 @@ fn filter_from(q: &ListQuery) -> Result<TaskFilter, ApiError> {
         Some(p) => Some(Priority::parse(p).ok_or(ApiError::BadRequest("invalid_priority"))?),
         None => None,
     };
+    let status = match q.status.as_deref().filter(|s| !s.is_empty()) {
+        Some(s) => Some(Status::parse(s).ok_or(ApiError::BadRequest("invalid_status"))?),
+        None => None,
+    };
     let date = |value: &Option<String>| -> Result<Option<String>, ApiError> {
         match value.as_deref().filter(|d| !d.is_empty()) {
             Some(d) if validation::is_valid_date(d) => Ok(Some(d.to_owned())),
@@ -166,6 +171,7 @@ fn filter_from(q: &ListQuery) -> Result<TaskFilter, ApiError> {
         project: q.project.clone().filter(|p| !p.is_empty()),
         priority,
         completed: q.completed.as_deref().map(|c| c == "true"),
+        status,
         due_from: date(&q.from)?,
         due_to: date(&q.to)?,
         include_scheduled: false,

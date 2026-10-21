@@ -2,11 +2,14 @@
 
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 
 use rusqlite::types::Value as SqlValue;
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
 
-use crate::model::{NewNote, NewTask, Note, NoteChanges, Priority, Task, TaskChanges, TaskFilter};
+use crate::model::{
+    NewNote, NewTask, Note, NoteChanges, Priority, Status, Task, TaskChanges, TaskFilter,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RepoError {
@@ -16,6 +19,8 @@ pub enum RepoError {
     Poisoned,
     #[error("stored task has invalid priority {0:?}")]
     InvalidPriority(String),
+    #[error("stored task has invalid status {0:?}")]
+    InvalidStatus(String),
 }
 
 pub type RepoResult<T> = Result<T, RepoError>;
@@ -33,7 +38,8 @@ const SCHEMA: &str = "
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
         completed_at TEXT DEFAULT NULL,
-        scheduled_date TEXT DEFAULT NULL
+        scheduled_date TEXT DEFAULT NULL,
+        status TEXT NOT NULL DEFAULT 'backlog' CHECK(status IN ('backlog', 'in_progress', 'done'))
     );
     -- Replaces the old idx_tasks_completed / idx_tasks_due_date / idx_tasks_project trio:
     -- `completed` alone has only 2 distinct values, so a single-column index on it made the
@@ -64,8 +70,14 @@ const SCHEMA: &str = "
 const COMPLETED_AT_ON_DONE: &str =
     "completed_at = CASE WHEN completed = 0 THEN datetime('now') ELSE completed_at END";
 
+/// Reopening a done task (without naming a status) puts it back in the backlog.
+const STATUS_ON_REOPEN: &str = "status = CASE WHEN status = 'done' THEN 'backlog' ELSE status END";
+
+/// Another process (the MCP server) may write while the HTTP server holds the file.
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
 const COLUMNS: &str = "id, title, description, project, priority, due_date, calendar_event_id, \
-    completed, created_at, updated_at, completed_at, scheduled_date";
+    completed, created_at, updated_at, completed_at, scheduled_date, status";
 
 /// Undated tasks last, then soonest due date, then high → low priority.
 const ORDER: &str = "ORDER BY due_date IS NULL, due_date ASC, \
@@ -81,6 +93,7 @@ impl TaskRepo {
     pub fn open(path: &Path) -> RepoResult<Self> {
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.busy_timeout(BUSY_TIMEOUT)?;
         Self::init(conn)
     }
 
@@ -115,6 +128,10 @@ impl TaskRepo {
         if let Some(completed) = filter.completed {
             clauses.push("completed = ?");
             values.push(i64::from(completed).into());
+        }
+        if let Some(status) = filter.status {
+            clauses.push("status = ?");
+            values.push(status.as_str().to_owned().into());
         }
         // Bounds on one date column; with `include_scheduled`, either date may match.
         let range = |column: &str, values: &mut Vec<SqlValue>| {
@@ -168,8 +185,9 @@ impl TaskRepo {
         let conn = self.lock()?;
         conn.execute(
             "INSERT INTO tasks (title, description, project, priority, due_date, calendar_event_id,
-                 scheduled_date)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                 scheduled_date, status, completed, completed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
+                 CASE WHEN ?9 = 1 THEN datetime('now') ELSE NULL END)",
             params![
                 task.title,
                 task.description,
@@ -177,7 +195,9 @@ impl TaskRepo {
                 task.priority.as_str(),
                 task.due_date,
                 task.calendar_event_id,
-                task.scheduled_date
+                task.scheduled_date,
+                task.status.as_str(),
+                i64::from(task.status.is_done())
             ],
         )?;
         let id = conn.last_insert_rowid();
@@ -217,14 +237,26 @@ impl TaskRepo {
         if let Some(v) = &changes.calendar_event_id {
             push("calendar_event_id", v.clone().into());
         }
-        if let Some(v) = changes.completed {
+        // `status` wins over `completed`; either way the two stay in step.
+        let done = changes.status.map(Status::is_done).or(changes.completed);
+        if let Some(status) = changes.status {
+            push("status", status.as_str().to_owned().into());
+        }
+        if let Some(v) = done {
             push("completed", i64::from(v).into());
-            // SQLite evaluates every SET expression against the old row, so order doesn't matter.
-            sets.push(if v {
-                COMPLETED_AT_ON_DONE.to_owned()
-            } else {
-                "completed_at = NULL".to_owned()
-            });
+        }
+        // SQLite evaluates every SET expression against the old row, so order doesn't matter.
+        if changes.status.is_none() {
+            match changes.completed {
+                Some(true) => sets.push("status = 'done'".to_owned()),
+                Some(false) => sets.push(STATUS_ON_REOPEN.to_owned()),
+                None => {}
+            }
+        }
+        match done {
+            Some(true) => sets.push(COMPLETED_AT_ON_DONE.to_owned()),
+            Some(false) => sets.push("completed_at = NULL".to_owned()),
+            None => {}
         }
         values.push(id.into());
 
@@ -243,7 +275,8 @@ impl TaskRepo {
         let conn = self.lock()?;
         let changed = conn.execute(
             "UPDATE tasks SET completed = 1 - completed, updated_at = datetime('now'),
-                 completed_at = CASE WHEN completed = 0 THEN datetime('now') ELSE NULL END
+                 completed_at = CASE WHEN completed = 0 THEN datetime('now') ELSE NULL END,
+                 status = CASE WHEN completed = 0 THEN 'done' ELSE 'backlog' END
              WHERE id = ?1",
             params![id],
         )?;
@@ -277,8 +310,9 @@ impl TaskRepo {
         {
             let mut stmt = tx.prepare(
                 "INSERT OR IGNORE INTO tasks (id, title, description, project, priority, due_date,
-                     calendar_event_id, completed, created_at, updated_at, completed_at, scheduled_date)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                     calendar_event_id, completed, created_at, updated_at, completed_at, scheduled_date,
+                     status)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             )?;
             for t in tasks {
                 inserted += stmt.execute(params![
@@ -293,7 +327,8 @@ impl TaskRepo {
                     t.created_at,
                     t.updated_at,
                     completed_at_for_import(t),
-                    t.scheduled_date
+                    t.scheduled_date,
+                    status_for_import(t).as_str()
                 ])?;
             }
         }
@@ -313,6 +348,14 @@ fn migrate(conn: &Connection) -> RepoResult<()> {
     if !has_column("scheduled_date")? {
         conn.execute_batch("ALTER TABLE tasks ADD COLUMN scheduled_date TEXT DEFAULT NULL;")?;
         tracing::info!("migrated tasks table: added scheduled_date");
+    }
+    if !has_column("status")? {
+        conn.execute_batch(
+            "ALTER TABLE tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'backlog'
+                 CHECK(status IN ('backlog', 'in_progress', 'done'));
+             UPDATE tasks SET status = 'done' WHERE completed = 1;",
+        )?;
+        tracing::info!("migrated tasks table: added status");
     }
     if !has_column("completed_at")? {
         conn.execute_batch(
@@ -348,6 +391,15 @@ fn completed_at_for_import(task: &Task) -> Option<&str> {
     }
 }
 
+/// `completed` is the source of truth for servers that predate `status`.
+fn status_for_import(task: &Task) -> Status {
+    match (task.completed, task.status) {
+        (true, _) => Status::Done,
+        (false, Status::Done) => Status::Backlog,
+        (false, status) => status,
+    }
+}
+
 /// Row as stored; converted to `Task` after validating the priority text.
 struct RawTask {
     id: i64,
@@ -362,6 +414,7 @@ struct RawTask {
     updated_at: String,
     completed_at: Option<String>,
     scheduled_date: Option<String>,
+    status: String,
 }
 
 fn read_row(row: &Row<'_>) -> rusqlite::Result<RawTask> {
@@ -378,6 +431,7 @@ fn read_row(row: &Row<'_>) -> rusqlite::Result<RawTask> {
         updated_at: row.get(9)?,
         completed_at: row.get(10)?,
         scheduled_date: row.get(11)?,
+        status: row.get(12)?,
     })
 }
 
@@ -385,6 +439,7 @@ impl RawTask {
     fn into_task(self) -> RepoResult<Task> {
         let priority =
             Priority::parse(&self.priority).ok_or(RepoError::InvalidPriority(self.priority))?;
+        let status = Status::parse(&self.status).ok_or(RepoError::InvalidStatus(self.status))?;
         Ok(Task {
             id: self.id,
             title: self.title,
@@ -395,6 +450,7 @@ impl RawTask {
             scheduled_date: self.scheduled_date,
             calendar_event_id: self.calendar_event_id,
             completed: self.completed != 0,
+            status,
             created_at: self.created_at,
             updated_at: self.updated_at,
             completed_at: self.completed_at,
@@ -544,6 +600,7 @@ mod tests {
             due_date: due.map(Into::into),
             scheduled_date: None,
             calendar_event_id: None,
+            status: Status::default(),
         }
     }
 
@@ -628,6 +685,7 @@ mod tests {
             due_date: None,
             scheduled_date: None,
             calendar_event_id: None,
+            status: Status::Done,
             completed: true,
             created_at: "2026-01-01 00:00:00".into(),
             updated_at: "2026-01-02 00:00:00".into(),
@@ -762,6 +820,81 @@ mod tests {
         };
         let planned = repo.update(open.id, &changes).unwrap().unwrap();
         assert_eq!(planned.scheduled_date.as_deref(), Some("2026-10-03"));
+        // Status is backfilled from `completed`.
+        assert_eq!(planned.status, Status::Backlog);
+        let done = tasks.iter().find(|x| x.title == "done").unwrap();
+        assert_eq!(done.status, Status::Done);
+    }
+
+    #[test]
+    fn status_and_completed_stay_in_step() {
+        let repo = TaskRepo::in_memory().unwrap();
+        let t = repo.create(&new_task("Flow", Priority::Low, None)).unwrap();
+        assert_eq!((t.status, t.completed), (Status::Backlog, false));
+        let set = |status: Status| TaskChanges {
+            status: Some(status),
+            ..Default::default()
+        };
+
+        let started = repo
+            .update(t.id, &set(Status::InProgress))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (started.status, started.completed),
+            (Status::InProgress, false)
+        );
+
+        let done = repo.update(t.id, &set(Status::Done)).unwrap().unwrap();
+        assert_eq!((done.status, done.completed), (Status::Done, true));
+        assert!(done.completed_at.is_some());
+
+        // Reopening through `completed` puts it back in the backlog.
+        let reopened = TaskChanges {
+            completed: Some(false),
+            ..Default::default()
+        };
+        let back = repo.update(t.id, &reopened).unwrap().unwrap();
+        assert_eq!(
+            (back.status, back.completed, back.completed_at),
+            (Status::Backlog, false, None)
+        );
+
+        // `completed: false` leaves an in-progress task in progress.
+        repo.update(t.id, &set(Status::InProgress)).unwrap();
+        let still = repo.update(t.id, &reopened).unwrap().unwrap();
+        assert_eq!(still.status, Status::InProgress);
+
+        // Toggle: open → done → backlog.
+        let toggled = repo.toggle(t.id).unwrap().unwrap();
+        assert_eq!((toggled.status, toggled.completed), (Status::Done, true));
+        let untoggled = repo.toggle(t.id).unwrap().unwrap();
+        assert_eq!(
+            (untoggled.status, untoggled.completed),
+            (Status::Backlog, false)
+        );
+    }
+
+    #[test]
+    fn creating_a_done_task_marks_it_completed_and_filters_by_status() {
+        let repo = TaskRepo::in_memory().unwrap();
+        let mut input = new_task("Shipped", Priority::Low, None);
+        input.status = Status::Done;
+        let t = repo.create(&input).unwrap();
+        assert!(t.completed && t.completed_at.is_some());
+        let mut wip = new_task("WIP", Priority::Low, None);
+        wip.status = Status::InProgress;
+        repo.create(&wip).unwrap();
+
+        let filter = TaskFilter {
+            status: Some(Status::InProgress),
+            ..Default::default()
+        };
+        let found = repo.list(&filter).unwrap();
+        assert_eq!(
+            found.iter().map(|t| t.title.as_str()).collect::<Vec<_>>(),
+            ["WIP"]
+        );
     }
 
     // MARK: - Indexing plan (read-only verification)
@@ -809,6 +942,7 @@ mod tests {
             due_date: due.map(Into::into),
             scheduled_date: None,
             calendar_event_id: None,
+            status: Status::default(),
         };
         // 3 open + 3 done, spread over 3 projects and several due dates.
         for (title, project, due) in [
@@ -945,6 +1079,7 @@ mod tests {
                 due_date: Some(format!("2026-{:02}-{:02}", 1 + (i % 12), 1 + (i % 28))),
                 scheduled_date: None,
                 calendar_event_id: None,
+                status: Status::default(),
             })
             .unwrap();
         }

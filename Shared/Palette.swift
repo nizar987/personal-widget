@@ -18,6 +18,14 @@ enum Palette {
         }
     }
 
+    static func color(for status: TaskStatus) -> Color {
+        switch status {
+        case .backlog: return someday
+        case .inProgress: return .teal
+        case .done: return done
+        }
+    }
+
     /// Brighter tint on dark backgrounds, deeper tint on light ones for contrast.
     private static func adaptive(dark: (CGFloat, CGFloat, CGFloat), light: (CGFloat, CGFloat, CGFloat)) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in

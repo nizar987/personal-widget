@@ -399,3 +399,64 @@ async fn scheduled_date_is_optional_settable_clearable_and_in_views() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(bad["error"], json!("invalid_scheduled_date"));
 }
+
+#[tokio::test]
+async fn status_moves_through_the_workflow_and_filters() {
+    let app = app();
+    let task = create(&app, "Write spec", None).await;
+    let id = task["id"].as_i64().unwrap();
+    assert_eq!(task["status"], json!("backlog"));
+
+    let (_, body) = call(
+        &app,
+        Method::PATCH,
+        &format!("/api/tasks/{id}"),
+        Some(json!({"status": "in_progress"})),
+    )
+    .await;
+    assert_eq!(body["data"]["status"], json!("in_progress"));
+    assert_eq!(body["data"]["completed"], json!(false));
+
+    let (_, body) = call(&app, Method::GET, "/api/tasks?status=in_progress", None).await;
+    assert_eq!(body["data"].as_array().unwrap().len(), 1);
+
+    let (_, body) = call(
+        &app,
+        Method::PATCH,
+        &format!("/api/tasks/{id}"),
+        Some(json!({"status": "done"})),
+    )
+    .await;
+    assert_eq!(body["data"]["completed"], json!(true));
+
+    let (status, body) = call(
+        &app,
+        Method::PATCH,
+        &format!("/api/tasks/{id}"),
+        Some(json!({"status": "doing"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], json!("invalid_status"));
+
+    let (status, _) = call(&app, Method::GET, "/api/tasks?status=nope", None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn create_keeps_the_do_date() {
+    let app = app();
+    let (status, body) = call(
+        &app,
+        Method::POST,
+        "/api/tasks",
+        Some(json!({
+            "title": "Plan", "project": "wms", "priority": "low",
+            "due_date": "2026-10-30", "scheduled_date": "2026-10-22",
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["data"]["scheduled_date"], json!("2026-10-22"));
+    assert_eq!(body["data"]["due_date"], json!("2026-10-30"));
+}

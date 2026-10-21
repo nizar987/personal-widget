@@ -15,6 +15,14 @@ struct Task: Identifiable, Codable, Hashable {
     var completedAt: String? = nil
     /// YYYY-MM-DD: the day you plan to work on it (separate from the due date).
     var scheduledDate: String? = nil
+    /// Workflow stage as the server sent it; nil from servers that predate it. Read `stage`.
+    var status: TaskStatus? = nil
+
+    /// Backlog → In Progress → Done. Always `.done` exactly when `completed` is true.
+    var stage: TaskStatus {
+        if completed { return .done }
+        return status == .inProgress ? .inProgress : .backlog
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, project, priority
@@ -25,6 +33,40 @@ struct Task: Identifiable, Codable, Hashable {
         case updatedAt = "updated_at"
         case completedAt = "completed_at"
         case scheduledDate = "scheduled_date"
+        case status
+    }
+}
+
+/// Where a task is in its workflow. Reminders cover backlog and in-progress tasks.
+enum TaskStatus: String, Codable, CaseIterable, Identifiable {
+    case backlog
+    case inProgress = "in_progress"
+    case done
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .backlog: return "Backlog"
+        case .inProgress: return "In Progress"
+        case .done: return "Done"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .backlog: return "tray"
+        case .inProgress: return "play.circle.fill"
+        case .done: return "checkmark.circle.fill"
+        }
+    }
+
+    /// The step after this one; done stays done.
+    var next: TaskStatus {
+        switch self {
+        case .backlog: return .inProgress
+        case .inProgress, .done: return .done
+        }
     }
 }
 

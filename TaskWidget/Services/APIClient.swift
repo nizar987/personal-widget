@@ -23,6 +23,7 @@ struct NewTaskInput: Codable {
     let due_date: String?
     let description: String?
     var scheduled_date: String? = nil
+    var status: TaskStatus? = nil
 }
 
 /// Partial update for PATCH /api/tasks/:id. Nil fields are left unchanged.
@@ -41,9 +42,11 @@ struct TaskPatch: Encodable {
     var completed: Bool?
     /// The do date ("work on it on…").
     var scheduledDate: DueDate?
+    /// Moving to `.done` also completes the task; leaving `.done` reopens it.
+    var status: TaskStatus?
 
     private enum CodingKeys: String, CodingKey {
-        case title, description, project, priority, completed
+        case title, description, project, priority, completed, status
         case dueDate = "due_date"
         case scheduledDate = "scheduled_date"
     }
@@ -55,6 +58,7 @@ struct TaskPatch: Encodable {
         try c.encodeIfPresent(project, forKey: .project)
         try c.encodeIfPresent(priority, forKey: .priority)
         try c.encodeIfPresent(completed, forKey: .completed)
+        try c.encodeIfPresent(status, forKey: .status)
         switch dueDate {
         case .set(let day): try c.encode(day, forKey: .dueDate)
         case .clear: try c.encodeNil(forKey: .dueDate)

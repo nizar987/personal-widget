@@ -150,3 +150,52 @@ enum DueChoice: CaseIterable, Identifiable {
         }
     }
 }
+
+/// Lays children out left to right and wraps onto a new line when the width runs out,
+/// so rows of chips never push a narrow panel wider than it is.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+    var lineSpacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(subviews, maxWidth: proposal.width ?? .infinity)
+        let width = rows.map(\.width).max() ?? 0
+        let height = rows.map(\.height).reduce(0, +) + lineSpacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: proposal.width.map { min($0, width) } ?? width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(subviews, maxWidth: bounds.width) {
+            var x = bounds.minX
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+                                      proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + lineSpacing
+        }
+    }
+
+    private struct Row {
+        var indices: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func arrange(_ subviews: Subviews, maxWidth: CGFloat) -> [Row] {
+        subviews.indices.reduce(into: [Row]()) { rows, index in
+            let size = subviews[index].sizeThatFits(.unspecified)
+            if let last = rows.last, !last.indices.isEmpty, last.width + spacing + size.width > maxWidth {
+                rows.append(Row())
+            }
+            if rows.isEmpty { rows.append(Row()) }
+            let current = rows[rows.count - 1]
+            let gap = current.indices.isEmpty ? 0 : spacing
+            rows[rows.count - 1] = Row(indices: current.indices + [index],
+                                       width: current.width + gap + size.width,
+                                       height: max(current.height, size.height))
+        }
+    }
+}

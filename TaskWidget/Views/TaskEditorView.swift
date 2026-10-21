@@ -13,6 +13,7 @@ struct TaskEditorView: View {
     @State private var notes = ""
     @State private var project = ""
     @State private var priority: Priority = .medium
+    @State private var status: TaskStatus = .backlog
     @State private var hasDue = false
     @State private var due = Date()
     @State private var hasScheduled = false
@@ -42,6 +43,13 @@ struct TaskEditorView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                 }
+                field("Status") {
+                    Picker("Status", selection: $status) {
+                        ForEach(TaskStatus.allCases) { s in Text(s.displayName).tag(s) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
                 field("Do On") {
                     dateField("Plan a day to work on it", isOn: $hasScheduled, date: $scheduled)
                 }
@@ -64,6 +72,8 @@ struct TaskEditorView: View {
         }
         .onAppear(perform: reset)
         .onChange(of: task.id) { reset() }
+        // Done / not done from the header button or a row: keep the picker in step.
+        .onChange(of: task.stage) { status = task.stage }
         .animation(AppStyle.spring, value: hasDue)
         .animation(AppStyle.spring, value: hasScheduled)
     }
@@ -180,7 +190,7 @@ struct TaskEditorView: View {
 
     private var hasChanges: Bool {
         trimmedTitle != task.title || notes != task.description || trimmedProject != task.project
-            || priority != task.priority || draftDue != task.dueDay.map(TaskDate.string(from:))
+            || priority != task.priority || status != task.stage || draftDue != task.dueDay.map(TaskDate.string(from:))
             || draftScheduled != task.scheduledDay.map(TaskDate.string(from:))
     }
 
@@ -189,6 +199,7 @@ struct TaskEditorView: View {
         notes = task.description
         project = task.project
         priority = task.priority
+        status = task.stage
         hasDue = task.dueDay != nil
         due = task.dueDay ?? TaskDate.day(offset: 0)
         hasScheduled = task.scheduledDay != nil
@@ -201,6 +212,7 @@ struct TaskEditorView: View {
         if notes != task.description { patch.description = notes }
         if trimmedProject != task.project { patch.project = trimmedProject }
         if priority != task.priority { patch.priority = priority }
+        if status != task.stage { patch.status = status }
         if draftDue != task.dueDay.map(TaskDate.string(from:)) {
             patch.dueDate = draftDue.map { .set($0) } ?? .clear
         }

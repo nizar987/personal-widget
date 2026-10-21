@@ -45,13 +45,13 @@ struct QuickAddBar: View {
                         .transition(.scale.combined(with: .opacity))
                 }
             }
-            HStack(spacing: 6) {
+            FlowLayout(spacing: 6) {
                 projectMenu
                 priorityMenu
                 doMenu
                 dueMenu
-                Spacer()
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 28)
         }
         .card(padding: 12)
